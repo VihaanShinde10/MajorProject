@@ -1,0 +1,32 @@
+# Minimal requirements - installs latest compatible versions
+# Use this if requirements.txt causes version conflicts
+
+# Web UI
+streamlit
+
+# Data processing
+pandas
+numpy<2.0.0
+
+# ML/DL backend
+torch
+
+# Embeddings & NLP
+sentence-transformers
+transformers
+
+# Vector search
+faiss-cpu
+
+# Clustering
+hdbscan
+
+# ML utilities
+scikit-learn
+
+# Text processing
+rapidfuzz
+
+# Visualizations
+plotly
+
