@@ -9,30 +9,61 @@ class BehavioralFeatureExtractor:
     
     def extract(self, txn: pd.Series, user_history: pd.DataFrame) -> Dict[str, float]:
         """
-        Extract behavioral features for a transaction.
-        ROBUST: Prioritizes recipient_name for merchant identification.
+        Extract ENHANCED behavioral features for better discrimination.
+        Features designed to capture spending patterns, merchant behavior, temporal patterns.
         """
         features = {}
         
-        # Amount features
+        # Amount features - Enhanced with more granularity
         amount = txn['amount']
         features['amount_log'] = np.log1p(amount)
+        features['amount_sqrt'] = np.sqrt(amount)  # Alternative scaling
+        features['amount_raw'] = min(amount / 10000, 10.0)  # Capped normalized amount
+        
+        # Amount range indicators (helps categorize by typical transaction sizes)
+        features['is_micro'] = 1 if amount < 100 else 0  # Small purchases
+        features['is_small'] = 1 if 100 <= amount < 500 else 0
+        features['is_medium'] = 1 if 500 <= amount < 2000 else 0
+        features['is_large'] = 1 if 2000 <= amount < 10000 else 0
+        features['is_xlarge'] = 1 if amount >= 10000 else 0  # Major purchases/transfers
         
         if len(user_history) > 0:
             features['amount_percentile'] = self._percentile(amount, user_history['amount'])
             features['amount_zscore'] = self._zscore(amount, user_history['amount'])
+            
+            # Deviation from user's typical spending
+            features['amount_deviation'] = abs(amount - user_history['amount'].median()) / (user_history['amount'].std() + 1)
         else:
             features['amount_percentile'] = 0.5
             features['amount_zscore'] = 0.0
+            features['amount_deviation'] = 0.0
         
-        # Temporal features
+        # Temporal features - Enhanced for better pattern detection
         date = pd.to_datetime(txn['date'])
-        features['hour'] = date.hour if hasattr(date, 'hour') else 12
+        hour = date.hour if hasattr(date, 'hour') else 12
+        features['hour'] = hour
+        features['hour_sin'] = np.sin(2 * np.pi * hour / 24)  # Cyclical encoding
+        features['hour_cos'] = np.cos(2 * np.pi * hour / 24)
+        
         features['day_of_week'] = date.dayofweek
+        features['day_sin'] = np.sin(2 * np.pi * date.dayofweek / 7)  # Cyclical
+        features['day_cos'] = np.cos(2 * np.pi * date.dayofweek / 7)
+        
         features['day_of_month'] = date.day
         features['is_weekday'] = 1 if date.dayofweek < 5 else 0
-        features['is_commute_window'] = 1 if (7 <= features['hour'] <= 10) or (17 <= features['hour'] <= 20) else 0
-        features['is_month_start'] = 1 if date.day <= 5 else 0
+        features['is_weekend'] = 1 if date.dayofweek >= 5 else 0
+        
+        # Time-of-day patterns (better for category discrimination)
+        features['is_early_morning'] = 1 if 5 <= hour < 9 else 0  # Commute, breakfast
+        features['is_work_hours'] = 1 if 9 <= hour < 17 else 0  # Work-related
+        features['is_evening'] = 1 if 17 <= hour < 22 else 0  # Dining, entertainment
+        features['is_late_night'] = 1 if hour >= 22 or hour < 5 else 0  # Subscriptions, unusual
+        features['is_commute_window'] = 1 if (7 <= hour <= 10) or (17 <= hour <= 20) else 0
+        
+        # Month patterns
+        features['is_month_start'] = 1 if date.day <= 5 else 0  # Salary, bills
+        features['is_month_mid'] = 1 if 10 <= date.day <= 20 else 0
+        features['is_month_end'] = 1 if date.day >= 25 else 0
         
         # Recurrence features
         if len(user_history) > 0:
@@ -44,8 +75,7 @@ class BehavioralFeatureExtractor:
             features['freq_count_30d'] = 0
             features['days_since_last'] = 999
         
-        # Merchant features - ROBUST: Use recipient_name (UPI) if available
-        # Priority 1: Use recipient_name (most reliable for UPI)
+        # Merchant features - ENHANCED for better behavior patterns
         recipient_name = str(txn.get('Recipient_Name', txn.get('recipient_name', '')))
         merchant = str(txn.get('merchant', ''))
         
@@ -63,11 +93,31 @@ class BehavioralFeatureExtractor:
             else:
                 merchant_txns = user_history[user_history['merchant'] == merchant_id]
             
-            features['merchant_frequency'] = len(merchant_txns)
+            features['merchant_frequency'] = min(len(merchant_txns) / 10, 5.0)  # Normalized
             features['is_new_merchant'] = 0 if len(merchant_txns) > 0 else 1
+            features['is_regular_merchant'] = 1 if len(merchant_txns) >= 3 else 0  # Regular vendor
+            features['is_frequent_merchant'] = 1 if len(merchant_txns) >= 10 else 0
+            
+            # Merchant amount consistency (helps identify subscription vs variable spending)
+            if len(merchant_txns) > 1:
+                merchant_amounts = merchant_txns['amount'].values
+                features['merchant_amount_std'] = np.std(merchant_amounts) / (np.mean(merchant_amounts) + 1)
+                features['merchant_amount_consistency'] = 1 / (1 + features['merchant_amount_std'])
+            else:
+                features['merchant_amount_std'] = 1.0
+                features['merchant_amount_consistency'] = 0.5
         else:
-            features['merchant_frequency'] = 0
+            features['merchant_frequency'] = 0.0
             features['is_new_merchant'] = 1
+            features['is_regular_merchant'] = 0
+            features['is_frequent_merchant'] = 0
+            features['merchant_amount_std'] = 1.0
+            features['merchant_amount_consistency'] = 0.5
+        
+        # Transaction type indicators (debit vs credit patterns)
+        txn_type = str(txn.get('type', '')).lower()
+        features['is_debit'] = 1 if 'debit' in txn_type or txn_type == 'dr' else 0
+        features['is_credit'] = 1 if 'credit' in txn_type or txn_type == 'cr' else 0
         
         # Rolling statistics (7d, 30d)
         if len(user_history) > 0:

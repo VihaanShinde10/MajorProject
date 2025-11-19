@@ -12,7 +12,8 @@
       "five guys", "hard rock cafe", "chilis", "tgif", "fridays", "nandos", "nando",
       "barbeque nation", "absolute barbecues", "mainland china", "oh calcutta", "punjabi by nature",
       "sigree", "farzi cafe", "monkey bar", "hard rock", "brewbot", "beer cafe",
-      "salt water cafe", "suzette", "koko", "ellipsis", "the glass house", "gazebo"
+      "salt water cafe", "suzette", "koko", "ellipsis", "the glass house", "gazebo",
+      "restaura", "hotelha", "cakedine", "amarfas", "relishr", "jumboki", "dailyfr"
     ],
     "food_delivery": [
       "swiggy", "zomato", "uber eats", "ubereats", "dunzo", "freshmenu", "faasos",
@@ -43,8 +44,8 @@
     "transport": [
       "uber", "ola", "rapido", "meru", "fastrack", "best", "mumbai metro",
       "western railway", "central railway", "harbour line", "fastag", "paytm fastag",
-      "indian railways", "indianr", "irctc", "rail ticket", "blue smart", "yulu",
-      "bounce", "vogo", "quick ride", "metro card", "auto rickshaw"
+      "indian railways", "indianr", "irctc", "irctcuts", "rail ticket", "blue smart", "yulu",
+      "bounce", "vogo", "quick ride", "metro card", "auto rickshaw", "romaxes"
     ],
     "airlines": [
       "indigo", "air india", "spicejet", "vistara", "go first", "goair", "akasa air",
@@ -192,7 +193,7 @@
     "streaming": [
       "netflix", "netflixupi", "amazon prime", "prime video", "disney", "disney plus",
       "hotstar", "disney hotstar", "zee5", "sonyliv", "voot", "voot select",
-      "alt balaji", "altbalaji", "mx player", "jio cinema", "apple tv", "apple tv plus",
+      "alt balaji", "altbalaji", "mx player", "jio cinema", "jiocinema", "apple tv", "apple tv plus",
       "youtube premium", "youtube music premium", "aha", "hoichoi", "lionsgate play"
     ],
     "music": [
@@ -242,26 +243,7 @@
     "keywords": ["mutual fund", "mf", "sip", "systematic investment", "investment", "stock", "equity", "gold", "trading", "demat", "crypto", "bitcoin"]
   },
   
-  "Transfers": {
-    "banks": [
-      "hdfc", "hdfc bank", "icici", "icici bank", "sbi", "state bank", "axis", "axis bank",
-      "kotak", "kotak mahindra", "yes bank", "indusind", "indusind bank", "rbl", "rbl bank",
-      "federal", "federal bank", "idfc", "idfc first", "standard chartered", "hsbc",
-      "dbs", "citibank", "citi", "punjab national", "pnb", "bank of baroda", "bob",
-      "canara bank", "union bank", "bank of india", "boi", "indian bank"
-    ],
-    "payment_apps": [
-      "paytm", "phonepe", "phone pe", "google pay", "gpay", "googlepay", "amazon pay",
-      "amazonpay", "mobikwik", "freecharge", "bhim", "whatsapp pay", "cred", "slice"
-    ],
-    "people_names": [
-      "vinayak", "anushka", "shubham", "venkates", "aashay", "harshba", 
-      "alphavi", "mayabha", "bhartia", "rajesh", "suresh", "ramesh", "mahesh",
-      "dinesh", "vijay", "amit", "rohit", "priya", "neha", "pooja", "ravi",
-      "kumar", "sharma", "singh", "verma", "gupta", "patel", "shah"
-    ],
-    "keywords": ["transfer", "neft", "rtgs", "imps", "upi", "wallet", "self transfer", "fund transfer", "sent", "payme", "payment", "send money"]
-  },
+  
   
   "Salary/Income": {
     "keywords": ["salary", "wages", "payroll", "income", "earnings", "remuneration", "stipend", "honorarium", "credit", "deposit", "refund"]

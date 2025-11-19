@@ -330,8 +330,9 @@ with tab1:
                             note=note
                         )
                         
-                        # Check if canonical match exists
-                        if norm_metadata.get('canonical_match') and norm_metadata.get('canonical_confidence', 0) > 0.9:
+                        # REDUCED DOMINANCE: Only use canonical for EXACT matches (>0.98)
+                        # Let most transactions flow through semantic/behavioral layers
+                        if norm_metadata.get('canonical_match') and norm_metadata.get('canonical_confidence', 0) > 0.98:
                             canonical = norm_metadata['canonical_match']
                             category = normalizer.category_map.get(canonical, 'Others/Uncategorized')
                             
@@ -478,7 +479,8 @@ with tab1:
                         )
                         
                         # Store for future index building (sequential learning)
-                        if classification.confidence >= 0.60:  # Only store confident predictions
+                        # ADJUSTED: Lower threshold to allow more learning from semantic matches
+                        if classification.confidence >= 0.55:  # Lowered from 0.60 - store more predictions
                             classified_embeddings.append(embedding)
                             classified_categories.append(classification.category)
                             classified_metadata.append({

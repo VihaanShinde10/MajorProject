@@ -14,9 +14,12 @@ class ClassificationResult:
 
 class FinalClassifier:
     def __init__(self):
+        # ADJUSTED: Lower auto-label threshold to allow more layer exploration
+        # Goal: Let transactions travel through more layers before "settling"
+        # This ensures deeper semantic and behavioral analysis
         self.confidence_thresholds = {
-            'auto_label': 0.70,  # Lowered from 0.75 to reduce L8 usage
-            'probable': 0.50,
+            'auto_label': 0.60,  # Lowered from 0.70 - more exploration
+            'probable': 0.45,    # Lowered from 0.50 - wider "uncertain" band
             'request_feedback': 0.0
         }
         # Fixed categories - ONLY these are allowed

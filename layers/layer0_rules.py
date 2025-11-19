@@ -71,6 +71,7 @@ class RuleBasedDetector:
         """
         Detect transaction category using deterministic rules.
         ROBUST: Prioritizes recipient_name, upi_id, and note fields.
+        ENHANCED: Uses transaction type hints from Description field patterns.
         Returns: (category, confidence, reason)
         """
         amount = txn['amount']
@@ -88,6 +89,22 @@ class RuleBasedDetector:
         recipient_name = recipient_name if recipient_name not in ['', 'nan', 'none'] else ''
         upi_id = upi_id if upi_id not in ['', 'nan', 'none'] else ''
         note = note if note not in ['', 'nan', 'none'] else ''
+        
+        # ENHANCED: Check for transaction type hints from Description patterns
+        # Patterns like "SALARY-NEFT", "AUTO-DEBIT", "ATM-CASH-WDL"
+        txn_type_hint = self._detect_transaction_type_from_description(description)
+        
+        # REDUCED DOMINANCE: Only use type hints for very specific cases
+        # Most transactions should flow through semantic/behavioral layers
+        # Only catch: Salary (very clear), ATM withdrawals (definitive)
+        if txn_type_hint in ['Salary/Income', 'Transfers']:
+            if txn_type_hint == 'Salary/Income' and txn_type == 'credit' and amount >= 20000:
+                # Very high salary threshold to avoid false positives
+                return txn_type_hint, 0.96, f'Rule: High-value salary credit'
+            elif txn_type_hint == 'Transfers' and 'ATM-CASH-WDL' in description.upper():
+                # ATM withdrawals are definitive transfers
+                return 'Transfers', 0.98, f'Rule: ATM cash withdrawal'
+        # All other hints are ignored - let deeper layers analyze
         
         # Priority 1: Check RECIPIENT_NAME first (most reliable for UPI)
         if recipient_name:
@@ -221,37 +238,26 @@ class RuleBasedDetector:
         
         best_category, best_keyword, best_ratio, is_exact, is_dominant, is_word_boundary, match_method = matched_items[0]
         
-        # ULTRA-STRICT RULES: Only return for high-confidence matches
+        # MINIMALIST LAYER 0: Only catch EXACT, UNAMBIGUOUS matches
+        # Goal: Let 90%+ of transactions flow through semantic/behavioral layers
+        # Layer 0 should be a safety net for obvious cases ONLY
         
-        # Rule 1: Exact match (e.g., "netflix" == "netflix")
-        if is_exact:
-            confidence = 0.98
-            return best_category, confidence, f'Exact corpus match: "{best_keyword}"'
-        
-        # Rule 2: Dominant word-boundary match (keyword is >50% of text)
-        if is_word_boundary and is_dominant and len(best_keyword) >= 5:
-            confidence = min(0.95, 0.85 + best_ratio * 0.2)
-            return best_category, confidence, f'Strong corpus match: "{best_keyword}"'
-        
-        # Rule 3: High quality word-boundary match (long keyword, good ratio)
-        if is_word_boundary and best_ratio > 0.4 and len(best_keyword) > 8:
-            confidence = min(0.92, 0.82 + best_ratio * 0.15)
-            return best_category, confidence, f'Corpus match: "{best_keyword}"'
-        
-        # Rule 4: Top national brands (very restrictive) - only if word-boundary match
-        # These are brands everyone knows, so we can be more lenient with ratio
-        top_national_brands = [
+        # Rule 1: EXACT match with well-known brands ONLY
+        top_brands_only = [
             'netflix', 'amazon', 'flipkart', 'swiggy', 'zomato', 'uber', 'ola',
-            'spotify', 'hotstar', 'prime', 'paytm', 'phonepe', 'googlepay',
-            'starbucks', 'mcdonalds', 'kfc', 'dominos', 'burgerking', 'burger king',
-            'indigo', 'air india', 'spicejet'
+            'spotify', 'hotstar', 'paytm', 'phonepe', 'googlepay', 'mcdonalds', 'kfc'
         ]
-        if is_word_boundary and best_keyword in top_national_brands and best_ratio > 0.3:
-            confidence = 0.88
-            return best_category, confidence, f'Top brand match: "{best_keyword}"'
+        if is_exact and best_keyword in top_brands_only and len(best_keyword) >= 5:
+            confidence = 0.95  # High but not perfect - allow layers to refine
+            return best_category, confidence, f'Exact brand match: "{best_keyword}"'
         
-        # REJECT everything else - let semantic/behavioral layers handle it
-        # This ensures Layer 0 only catches CLEAR, UNAMBIGUOUS matches
+        # Rule 2: ONLY for very dominant matches (>70% of text) with long keywords
+        if is_word_boundary and is_dominant and best_ratio > 0.70 and len(best_keyword) >= 8:
+            confidence = 0.88  # Lower confidence - encourage layer participation
+            return best_category, confidence, f'Dominant match: "{best_keyword}"'
+        
+        # REJECT everything else - semantic and behavioral layers will handle
+        # This ensures comprehensive layer participation
         return None
     
     def _is_salary(self, amount: float, date: datetime, history: pd.DataFrame) -> bool:
@@ -436,3 +442,72 @@ class RuleBasedDetector:
         
         # Default to Others
         return 'Others/Uncategorized'
+    
+    def _detect_transaction_type_from_description(self, description: str) -> Optional[str]:
+        """
+        Detect transaction type from Description field patterns.
+        Examples: "SALARY-NEFT", "AUTO-DEBIT", "ATM-CASH-WDL"
+        """
+        if not description:
+            return None
+        
+        desc_upper = description.upper()
+        
+        # Salary patterns
+        if 'SALARY' in desc_upper or 'INB-CREDIT' in desc_upper:
+            return 'Salary/Income'
+        
+        # Subscription patterns
+        if 'AUTO-DEBIT' in desc_upper or desc_upper.startswith('SUBS'):
+            return 'Subscriptions'
+        
+        # Bills patterns
+        if 'BILL-PAY' in desc_upper or 'RECHARGE' in desc_upper:
+            return 'Bills & Utilities'
+        
+        # Transfer patterns
+        if 'ATM-CASH-WDL' in desc_upper or 'NEFT-TRF' in desc_upper or 'IMPS-TO' in desc_upper:
+            return 'Transfers'
+        if 'MANUAL-REVIEW' in desc_upper or 'PENDING-REVIEW' in desc_upper:
+            return 'Transfers'
+        
+        # Transport patterns
+        if 'TICKET' in desc_upper or 'IRCTC' in desc_upper or desc_upper.startswith('RIDE'):
+            return 'Commute/Transport'
+        
+        # Entertainment patterns
+        if desc_upper.startswith('ENT-'):
+            return 'Entertainment'
+        
+        return None
+    
+    def _validate_type_hint(self, hint_category: str, amount: float, txn_type: str, context: str) -> bool:
+        """
+        Validate that the transaction type hint makes sense given the context.
+        """
+        # Salary: should be credit, reasonable amount
+        if hint_category == 'Salary/Income':
+            return txn_type == 'credit' and amount >= 10000
+        
+        # Subscriptions: typically small to medium debits
+        if hint_category == 'Subscriptions':
+            return txn_type == 'debit' and 50 <= amount <= 5000
+        
+        # Bills: medium range debits
+        if hint_category == 'Bills & Utilities':
+            return txn_type == 'debit' and 50 <= amount <= 10000
+        
+        # Transfers: any amount, check for person names
+        if hint_category == 'Transfers':
+            # ATM withdrawals are always transfers
+            return True
+        
+        # Transport: typically small to medium
+        if hint_category == 'Commute/Transport':
+            return txn_type == 'debit' and 50 <= amount <= 10000
+        
+        # Entertainment: medium range
+        if hint_category == 'Entertainment':
+            return txn_type == 'debit' and 100 <= amount <= 5000
+        
+        return True  # Default: allow hint

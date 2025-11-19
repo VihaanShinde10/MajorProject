@@ -70,59 +70,68 @@ class GatingController:
                          cluster_density: float,
                          user_txn_count: int) -> float:
         """
-        Improved heuristic for computing alpha.
+        Improved heuristic for computing alpha - FAVORS TEXT/SENTIMENT MORE.
         
         Strategy:
-        1. Start with base alpha from text confidence
-        2. Boost if text is very clear
-        3. Reduce if behavior patterns are very strong
-        4. Adjust based on experience (more transactions = more trust in behavior)
+        1. Prioritize text analysis for depth and semantic understanding
+        2. Boost if text is clear (even moderately clear)
+        3. Only reduce for VERY strong behavior patterns
+        4. Text gets higher weight across all scenarios
+        
+        PHILOSOPHY: Text contains rich semantic information that captures intent,
+        while behavior is useful but secondary. We want transactions to explore
+        semantic layers deeply before falling back to behavioral patterns.
         """
         
-        # Base alpha from text confidence
-        base_alpha = text_confidence
+        # REBALANCED: Give behavioral patterns more weight
+        # Goal: Allow both text and behavior to contribute meaningfully
+        base_alpha = min(0.75, text_confidence + 0.05)  # Reduced text boost from 0.10 to 0.05
         
         # Scenario 1: Very clear text (high confidence, many tokens, not generic)
-        if text_confidence > 0.85 and token_count >= 3 and not is_generic_text:
-            return 0.80  # Trust text heavily
+        if text_confidence > 0.85 and token_count >= 4 and not is_generic_text:
+            return 0.75  # Reduced from 0.85 - Allow behavior input
         
         # Scenario 2: Clear text but not perfect
         if text_confidence > 0.75 and not is_generic_text:
-            return 0.70  # Still favor text
+            return 0.65  # Reduced from 0.78 - More balanced
         
-        # Scenario 3: Strong recurring behavior pattern (subscription-like)
-        if recurrence_confidence > 0.85 and cluster_density > 0.75:
+        # Scenario 3: Moderate text confidence with good context
+        if text_confidence > 0.65 and token_count >= 4:
+            return 0.60  # Reduced from 0.70 - Balanced
+        
+        # Scenario 4: Strong recurring behavior pattern - TRUST BEHAVIOR MORE
+        if recurrence_confidence > 0.80 and cluster_density > 0.70:
             # Very strong behavior signal
-            if is_generic_text or text_confidence < 0.6:
-                return 0.25  # Trust behavior heavily
+            if is_generic_text or text_confidence < 0.55:
+                return 0.30  # Reduced from 0.35 - Trust behavior heavily
             else:
-                return 0.40  # Moderate behavior preference
+                return 0.45  # Reduced from 0.50 - Behavior gets more weight
         
-        # Scenario 4: Good behavior pattern but decent text
-        if recurrence_confidence > 0.70 and cluster_density > 0.60:
-            if text_confidence < 0.70:
-                return 0.35  # Favor behavior
+        # Scenario 5: Good behavior pattern - MORE BALANCED
+        if recurrence_confidence > 0.65 and cluster_density > 0.55:
+            if text_confidence < 0.65:
+                return 0.40  # Reduced from 0.45 - Behavior-leaning
             else:
-                return 0.50  # Balanced
+                return 0.55  # Reduced from 0.60 - More balanced
         
-        # Scenario 5: Generic text (force behavior if available)
+        # Scenario 6: Generic text - TRUST BEHAVIOR MORE
         if is_generic_text:
             if cluster_density > 0.50 or recurrence_confidence > 0.50:
-                return 0.30  # Trust behavior
+                return 0.35  # Reduced from 0.40 - Behavior dominant
             else:
-                return 0.55  # Slightly favor text (no good alternative)
+                return 0.50  # Reduced from 0.60 - Balanced
         
-        # Scenario 6: Balanced - adjust based on experience
+        # Scenario 7: Balanced - ALLOW BEHAVIOR MORE INFLUENCE
         if user_txn_count > 50:
-            # More experience = slightly favor behavior
-            behavior_boost = min(0.15, (user_txn_count - 50) / 500)
+            # More experience = favor behavior MORE
+            behavior_boost = min(0.15, (user_txn_count - 50) / 400)  # Increased impact
             adjustment = -behavior_boost * (recurrence_confidence + cluster_density) / 2
         else:
-            # Less experience = slightly favor text
-            adjustment = 0.05
+            # Less experience = still somewhat balanced
+            adjustment = 0.03  # Reduced from 0.08
         
-        # Default: weighted combination
-        alpha = (base_alpha * 0.6) + (1 - (recurrence_confidence + cluster_density) / 2) * 0.4 + adjustment
+        # Default: weighted combination with BALANCED weights
+        alpha = (base_alpha * 0.55) + (1 - (recurrence_confidence + cluster_density) / 2) * 0.45 + adjustment
         
         return alpha
     

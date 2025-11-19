@@ -8,16 +8,20 @@ from collections import Counter
 
 class BehavioralClusterer:
     """
-    Layer 5: Behavioral clustering using HDBSCAN.
-    ROBUST: Works with behavioral features extracted from UPI-enhanced merchant tracking.
+    Layer 5: ENHANCED Behavioral clustering using HDBSCAN + KNN.
+    - HDBSCAN for discovering natural clusters in behavioral patterns
+    - KNN for predicting categories of new transactions based on cluster centroids
+    - Better integration with all layers for comprehensive categorization
     """
     def __init__(self):
         self.clusterer = None
         self.scaler = StandardScaler()
-        self.cluster_labels = {}
+        self.cluster_labels = {}  # cluster_id -> category
+        self.cluster_centroids = {}  # cluster_id -> centroid vector
         self.feature_vectors = None
         self.transaction_ids = []
         self.categories = []
+        self.knn_model = None  # KNN for finding nearest cluster centroids
         
         # Fixed categories - enforce these
         self.fixed_categories = [
@@ -89,14 +93,16 @@ class BehavioralClusterer:
         
         self.feature_vectors = features_scaled
         
-        # Fit HDBSCAN with improved parameters
+        # Fit HDBSCAN with OPTIMIZED parameters for better clustering
         self.clusterer = hdbscan.HDBSCAN(
             min_cluster_size=min_cluster_size,
             min_samples=min_samples,
             metric='euclidean',
-            cluster_selection_epsilon=0.1,  # Reduced from 0.3 for more clusters
+            cluster_selection_epsilon=0.05,  # Lower = more granular clusters
             cluster_selection_method='eom',  # Excess of Mass (better for varied densities)
-            prediction_data=True
+            alpha=1.0,  # Distance scaling - 1.0 is standard
+            prediction_data=True,
+            approx_min_span_tree=False  # More accurate (slower but better quality)
         )
         
         cluster_ids = self.clusterer.fit_predict(features_scaled)
@@ -104,6 +110,12 @@ class BehavioralClusterer:
         # Label clusters using semantic categories if provided
         if categories is not None:
             self._label_clusters(cluster_ids, categories)
+        
+        # ENHANCED: Compute cluster centroids for KNN-based prediction
+        self._compute_cluster_centroids(cluster_ids, features_scaled)
+        
+        # ENHANCED: Build KNN model using cluster centroids
+        self._build_knn_model()
         
         return cluster_ids
     
@@ -130,20 +142,43 @@ class BehavioralClusterer:
             print(f"Error in scaling prediction features: {e}")
             return None, 0.0, {'reason': f'Scaling error: {str(e)}'}
         
-        # Get cluster assignment with soft membership
+        # ENHANCED: Try HDBSCAN soft clustering first
         cluster_id, membership_prob = self._soft_predict(feature_scaled[0])
         
-        if cluster_id == -1:  # Noise point
+        # If noise or low confidence, use KNN on cluster centroids
+        if cluster_id == -1 or membership_prob < 0.5:
+            if self.knn_model is not None and len(self.cluster_centroids) > 0:
+                knn_category, knn_conf = self._knn_predict(feature_scaled[0])
+                if knn_category:
+                    return knn_category, knn_conf, {
+                        'method': 'knn_centroid',
+                        'cluster_id': -1,
+                        'confidence': knn_conf,
+                        'reason': f'KNN to nearest cluster centroid'
+                    }
+            
+            # Fallback: noise point
             return None, 0.0, {
                 'method': 'cluster_noise',
                 'cluster_id': -1,
-                'reason': 'Classified as noise by HDBSCAN'
+                'reason': 'Classified as noise, KNN also failed'
             }
         
         # Get cluster label
         cluster_category = self.cluster_labels.get(cluster_id)
         
         if cluster_category is None:
+            # Try KNN as fallback
+            if self.knn_model is not None and len(self.cluster_centroids) > 0:
+                knn_category, knn_conf = self._knn_predict(feature_scaled[0])
+                if knn_category:
+                    return knn_category, knn_conf, {
+                        'method': 'knn_centroid_fallback',
+                        'cluster_id': cluster_id,
+                        'confidence': knn_conf,
+                        'reason': f'Cluster {cluster_id} unlabeled, used KNN'
+                    }
+            
             return None, membership_prob, {
                 'method': 'unlabeled_cluster',
                 'cluster_id': int(cluster_id),
@@ -276,4 +311,91 @@ class BehavioralClusterer:
         
         # Default to Others
         return 'Others/Uncategorized'
+    
+    def _compute_cluster_centroids(self, cluster_ids: np.ndarray, features_scaled: np.ndarray):
+        """
+        Compute centroids for each cluster.
+        Centroids are the mean feature vectors of all points in a cluster.
+        """
+        unique_clusters = set(cluster_ids)
+        unique_clusters.discard(-1)  # Remove noise
+        
+        self.cluster_centroids = {}
+        for cluster_id in unique_clusters:
+            mask = cluster_ids == cluster_id
+            cluster_points = features_scaled[mask]
+            if len(cluster_points) > 0:
+                centroid = np.mean(cluster_points, axis=0)
+                self.cluster_centroids[cluster_id] = centroid
+        
+        print(f"Computed {len(self.cluster_centroids)} cluster centroids")
+    
+    def _build_knn_model(self):
+        """
+        Build KNN model using cluster centroids.
+        This allows finding the nearest cluster for noise points or new transactions.
+        """
+        if len(self.cluster_centroids) == 0:
+            print("No cluster centroids to build KNN model")
+            return
+        
+        # Create arrays of centroids and their labels
+        centroid_vectors = []
+        centroid_labels = []
+        
+        for cluster_id, centroid in self.cluster_centroids.items():
+            if cluster_id in self.cluster_labels:  # Only use labeled clusters
+                centroid_vectors.append(centroid)
+                centroid_labels.append(self.cluster_labels[cluster_id])
+        
+        if len(centroid_vectors) == 0:
+            print("No labeled centroids for KNN model")
+            return
+        
+        centroid_vectors = np.array(centroid_vectors)
+        
+        # Build KNN model with k=3 (use 3 nearest clusters for voting)
+        k = min(3, len(centroid_vectors))
+        self.knn_model = NearestNeighbors(n_neighbors=k, metric='euclidean')
+        self.knn_model.fit(centroid_vectors)
+        
+        # Store the labels for voting
+        self.knn_centroid_labels = centroid_labels
+        
+        print(f"Built KNN model with {len(centroid_vectors)} labeled centroids, k={k}")
+    
+    def _knn_predict(self, feature_vector: np.ndarray) -> Tuple[Optional[str], float]:
+        """
+        Predict category using KNN on cluster centroids.
+        Returns: (category, confidence)
+        """
+        if self.knn_model is None or not hasattr(self, 'knn_centroid_labels'):
+            return None, 0.0
+        
+        try:
+            # Find k nearest centroids
+            distances, indices = self.knn_model.kneighbors(feature_vector.reshape(1, -1))
+            
+            # Get categories of nearest centroids
+            neighbor_categories = [self.knn_centroid_labels[idx] for idx in indices[0]]
+            
+            # Majority voting with distance-weighted confidence
+            category_counts = Counter(neighbor_categories)
+            most_common_category, count = category_counts.most_common(1)[0]
+            
+            # Confidence based on:
+            # 1. Majority consensus (how many neighbors agree)
+            # 2. Distance to nearest centroid (closer = higher confidence)
+            consensus_conf = count / len(neighbor_categories)  # 0.33 to 1.0
+            distance_conf = 1 / (1 + distances[0][0])  # Inverse distance
+            
+            # Combined confidence
+            confidence = 0.6 * consensus_conf + 0.4 * distance_conf
+            confidence = min(0.85, confidence)  # Cap at 0.85 (not perfect)
+            
+            return most_common_category, confidence
+        
+        except Exception as e:
+            print(f"Error in KNN prediction: {e}")
+            return None, 0.0
 
