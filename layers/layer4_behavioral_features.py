@@ -8,7 +8,10 @@ class BehavioralFeatureExtractor:
         self.feature_names = []
     
     def extract(self, txn: pd.Series, user_history: pd.DataFrame) -> Dict[str, float]:
-        """Extract behavioral features for a transaction."""
+        """
+        Extract behavioral features for a transaction.
+        ROBUST: Prioritizes recipient_name for merchant identification.
+        """
         features = {}
         
         # Amount features
@@ -41,10 +44,25 @@ class BehavioralFeatureExtractor:
             features['freq_count_30d'] = 0
             features['days_since_last'] = 999
         
-        # Merchant features
+        # Merchant features - ROBUST: Use recipient_name (UPI) if available
+        # Priority 1: Use recipient_name (most reliable for UPI)
+        recipient_name = str(txn.get('Recipient_Name', txn.get('recipient_name', '')))
         merchant = str(txn.get('merchant', ''))
-        if len(user_history) > 0 and merchant:
-            merchant_txns = user_history[user_history['merchant'] == merchant]
+        
+        # Use recipient_name if available and valid, else fall back to merchant
+        merchant_id = recipient_name if (recipient_name and recipient_name not in ['', 'nan', 'none', 'None']) else merchant
+        
+        if len(user_history) > 0 and merchant_id:
+            # Check both recipient_name and merchant columns for matching
+            if 'Recipient_Name' in user_history.columns or 'recipient_name' in user_history.columns:
+                recipient_col = 'Recipient_Name' if 'Recipient_Name' in user_history.columns else 'recipient_name'
+                merchant_txns = user_history[
+                    (user_history[recipient_col] == merchant_id) | 
+                    (user_history['merchant'] == merchant_id)
+                ]
+            else:
+                merchant_txns = user_history[user_history['merchant'] == merchant_id]
+            
             features['merchant_frequency'] = len(merchant_txns)
             features['is_new_merchant'] = 0 if len(merchant_txns) > 0 else 1
         else:
@@ -81,21 +99,38 @@ class BehavioralFeatureExtractor:
         return result if not np.isnan(result) and not np.isinf(result) else 0.0
     
     def _detect_recurrence(self, txn: pd.Series, history: pd.DataFrame) -> Dict:
+        """
+        Detect recurring transactions.
+        ROBUST: Uses recipient_name (UPI) for better merchant matching.
+        """
+        # Priority: Use recipient_name if available
+        recipient_name = str(txn.get('Recipient_Name', txn.get('recipient_name', '')))
         merchant = str(txn.get('merchant', ''))
+        
+        # Use recipient_name if available and valid
+        merchant_id = recipient_name if (recipient_name and recipient_name not in ['', 'nan', 'none', 'None']) else merchant
+        
         amount = txn['amount']
         date = pd.to_datetime(txn['date'])
         
-        # Find similar transactions (same merchant, similar amount)
+        # Find similar transactions (same merchant_id, similar amount)
+        # Match using recipient_name or merchant
+        if 'Recipient_Name' in history.columns or 'recipient_name' in history.columns:
+            recipient_col = 'Recipient_Name' if 'Recipient_Name' in history.columns else 'recipient_name'
+            merchant_mask = (history[recipient_col] == merchant_id) | (history['merchant'] == merchant_id)
+        else:
+            merchant_mask = history['merchant'] == merchant_id
+        
         # Protect against division by zero
         if amount == 0:
             amount_tolerance = 0.1  # Absolute tolerance for zero amounts
             similar = history[
-                (history['merchant'] == merchant) & 
+                merchant_mask & 
                 (np.abs(history['amount'] - amount) <= amount_tolerance)
             ].copy()
         else:
             similar = history[
-                (history['merchant'] == merchant) & 
+                merchant_mask & 
                 (np.abs(history['amount'] - amount) / amount < 0.1)
             ].copy()
         

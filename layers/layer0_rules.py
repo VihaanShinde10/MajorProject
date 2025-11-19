@@ -70,6 +70,7 @@ class RuleBasedDetector:
     def detect(self, txn: pd.Series, user_history: pd.DataFrame) -> Tuple[Optional[str], float, str]:
         """
         Detect transaction category using deterministic rules.
+        ROBUST: Prioritizes recipient_name, upi_id, and note fields.
         Returns: (category, confidence, reason)
         """
         amount = txn['amount']
@@ -78,47 +79,67 @@ class RuleBasedDetector:
         txn_type = str(txn.get('type', '')).lower()
         date = pd.to_datetime(txn['date'])
         
-        # Enhanced: Include UPI fields for better matching
+        # PRIORITY FIELDS: Extract UPI-specific data
         recipient_name = str(txn.get('Recipient_Name', txn.get('recipient_name', ''))).lower()
         upi_id = str(txn.get('UPI_ID', txn.get('upi_id', ''))).lower()
         note = str(txn.get('Note', txn.get('note', ''))).lower()
         
-        # Combine all text sources
-        combined_text = f"{description} {merchant} {recipient_name} {upi_id} {note}"
+        # Clean empty values
+        recipient_name = recipient_name if recipient_name not in ['', 'nan', 'none'] else ''
+        upi_id = upi_id if upi_id not in ['', 'nan', 'none'] else ''
+        note = note if note not in ['', 'nan', 'none'] else ''
         
-        # Priority 1: Check merchant corpus (most reliable)
+        # Priority 1: Check RECIPIENT_NAME first (most reliable for UPI)
+        if recipient_name:
+            recipient_match = self._match_corpus(recipient_name)
+            if recipient_match:
+                category, confidence, reason = recipient_match
+                return category, confidence + 0.02, f"{reason} [from RECIPIENT_NAME]"
+        
+        # Priority 2: Check UPI_ID (often contains merchant identifier)
+        if upi_id:
+            upi_match = self._match_corpus(upi_id)
+            if upi_match:
+                category, confidence, reason = upi_match
+                return category, confidence + 0.01, f"{reason} [from UPI_ID]"
+        
+        # Priority 3: Check NOTE field (provides context)
+        if note:
+            note_match = self._match_corpus(note)
+            if note_match:
+                category, confidence, reason = note_match
+                return category, confidence, f"{reason} [from NOTE]"
+        
+        # Priority 4: Check combined text (fallback)
+        combined_text = f"{recipient_name} {upi_id} {note} {description} {merchant}".strip()
         corpus_match = self._match_corpus(combined_text)
         if corpus_match:
             category, confidence, reason = corpus_match
             return category, confidence, reason
         
-        # Priority 2: Salary Detection (ONLY if super obvious)
-        # Disabled for now - let semantic layer learn salary patterns
-        # if txn_type == 'credit':
-        #     salary_match = self._is_salary(amount, date, user_history)
-        #     if salary_match:
-        #         return 'Salary/Income', 1.0, 'Rule: Credit, monthly, high amount, month start'
+        # Priority 5: Salary Detection (very specific rules)
+        if txn_type == 'credit':
+            salary_match = self._is_salary(amount, date, user_history)
+            if salary_match:
+                return 'Salary/Income', 1.0, 'Rule: Credit, monthly, high amount, month start'
         
-        # Priority 3: Investment Detection (ONLY explicit SIP keywords)
-        if txn_type == 'debit' and amount >= 500:
-            # Only if EXPLICIT investment keywords present
-            explicit_investment_keywords = ['sip', 'mutual fund', 'zerodha', 'groww', 'upstox', 'systematic']
-            if any(kw in combined_text for kw in explicit_investment_keywords):
-                return 'Investments', 0.95, 'Rule: Explicit SIP/investment keywords'
+        # Priority 6: Investment Detection (SIP patterns)
+        if txn_type == 'debit':
+            sip_match = self._is_sip(amount, combined_text, user_history)
+            if sip_match:
+                return 'Investments', 1.0, 'Rule: Debit, monthly, SIP keywords, recurring'
         
-        # Priority 4: Subscription Detection - DISABLED
-        # Let semantic layer learn subscription patterns from context
-        # subscription_match = self._is_subscription_strict(
-        #     combined_text, recipient_name, upi_id, note, amount, date, user_history
-        # )
-        # if subscription_match:
-        #     return 'Subscriptions', 1.0, 'Rule: Confirmed subscription service'
+        # Priority 7: STRICT Subscription Detection (checks recipient + note)
+        subscription_match = self._is_subscription_strict(
+            combined_text, recipient_name, upi_id, note, amount, date, user_history
+        )
+        if subscription_match:
+            return 'Subscriptions', 1.0, 'Rule: Confirmed subscription service'
         
-        # Priority 5: Transfer Detection (ONLY explicit keywords)
-        # Person-to-person transfers with explicit keywords
-        explicit_transfer_keywords = ['neft', 'rtgs', 'imps', 'self transfer', 'own account']
-        if any(kw in combined_text for kw in explicit_transfer_keywords):
-            return 'Transfers', 0.90, 'Rule: Explicit transfer keywords'
+        # Priority 8: Transfer Detection (checks recipient + note)
+        transfer_match = self._is_transfer(combined_text, recipient_name, amount, txn_type)
+        if transfer_match:
+            return 'Transfers', 0.95, 'Rule: Transfer keywords or person name detected'
         
         # No rule matched
         return None, 0.0, 'No rule matched'
@@ -126,50 +147,64 @@ class RuleBasedDetector:
     def _match_corpus(self, text: str) -> Optional[Tuple[str, float, str]]:
         """
         Match against Mumbai merchant corpus.
-        ULTRA-MINIMAL: Only catch the TOP 5-10 most obvious brands.
-        Let semantic layers (L3/L5) handle everything else.
-        
-        Goal: L0 should handle < 5% of transactions (not 30%+)
+        IMPROVED: More selective - only return for HIGH CONFIDENCE matches.
         """
         text = text.lower()
         
-        # ULTRA-RESTRICTED: Only these exact brands get L0 classification
-        # Everything else goes to semantic/clustering layers
-        ultra_obvious_brands = {
-            'netflix': 'Subscriptions',
-            'netflixupi': 'Subscriptions',
-            'spotify': 'Subscriptions',
-            'amazon prime': 'Subscriptions',
-            'hotstar': 'Subscriptions',
-            'swiggy': 'Food & Dining',
-            'zomato': 'Food & Dining',
-            'uber': 'Commute/Transport',
-            'ola': 'Commute/Transport',
-            'olacabs': 'Commute/Transport'
-        }
+        # Check for exact or partial matches
+        matched_items = []
+        for keyword, category in self.keyword_to_category.items():
+            if keyword in text:
+                # Calculate match quality
+                match_length = len(keyword)
+                text_length = len(text)
+                match_ratio = match_length / text_length
+                
+                # Also check how well keyword matches (not just substring)
+                # Exact match or keyword is major part of text
+                is_exact_match = (keyword == text)
+                is_dominant = (match_ratio > 0.5)
+                
+                matched_items.append((category, keyword, match_ratio, is_exact_match, is_dominant))
         
-        # Check for EXACT matches only
-        text_clean = text.strip()
+        if not matched_items:
+            return None
         
-        # Strategy 1: Exact match (highest confidence)
-        if text_clean in ultra_obvious_brands:
-            return ultra_obvious_brands[text_clean], 0.99, f'Exact L0 match: "{text_clean}"'
+        # Sort by match quality (exact > dominant > ratio)
+        matched_items.sort(key=lambda x: (x[3], x[4], x[2]), reverse=True)
         
-        # Strategy 2: Dominant substring (>70% of text, min 6 chars)
-        for brand, category in ultra_obvious_brands.items():
-            if brand in text_clean and len(brand) >= 6:
-                match_ratio = len(brand) / len(text_clean)
-                if match_ratio > 0.7:  # Brand is >70% of text
-                    return category, 0.90, f'Dominant L0 match: "{brand}"'
+        best_category, best_keyword, best_ratio, is_exact, is_dominant = matched_items[0]
         
-        # EVERYTHING ELSE → Pass to L3/L5 for semantic analysis
-        # This includes:
-        # - All local merchants (Julfikar, Bikaner, etc.)
-        # - All shops/stores
-        # - All bills & utilities
-        # - All entertainment venues
-        # - All other subscriptions
-        # Let the semantic layer learn these patterns!
+        # STRICTER RULES: Only return for well-known, common merchants
+        
+        # Strategy 1: Exact match (e.g., "netflix" == "netflix")
+        if is_exact:
+            confidence = 0.98
+            return best_category, confidence, f'Exact corpus match: "{best_keyword}"'
+        
+        # Strategy 2: Dominant match (keyword is >50% of text)
+        if is_dominant and len(best_keyword) >= 5:
+            confidence = min(0.95, 0.85 + best_ratio * 0.2)
+            return best_category, confidence, f'Strong corpus match: "{best_keyword}"'
+        
+        # Strategy 3: High quality partial match (long keyword, good ratio)
+        if best_ratio > 0.3 and len(best_keyword) > 8:
+            confidence = min(0.90, 0.80 + best_ratio * 0.15)
+            return best_category, confidence, f'Corpus match: "{best_keyword}"'
+        
+        # Strategy 4: Common brand keywords (medium match)
+        # Only for well-known brands in corpus
+        common_brands = [
+            'netflix', 'amazon', 'flipkart', 'swiggy', 'zomato', 'uber', 'ola',
+            'spotify', 'hotstar', 'prime', 'paytm', 'phonepe', 'googlepay',
+            'starbucks', 'mcdonalds', 'kfc', 'dominos', 'indigo', 'air india'
+        ]
+        if best_keyword in common_brands and best_ratio > 0.2:
+            confidence = 0.85
+            return best_category, confidence, f'Common brand match: "{best_keyword}"'
+        
+        # Don't return anything else - let other layers handle it
+        # This ensures Layer 0 only catches OBVIOUS, COMMON merchants
         return None
     
     def _is_salary(self, amount: float, date: datetime, history: pd.DataFrame) -> bool:
@@ -209,26 +244,51 @@ class RuleBasedDetector:
                                upi_id: str, note: str, amount: float, 
                                date: datetime, history: pd.DataFrame) -> bool:
         """
-        STRICT subscription detection with multiple checks.
-        All three criteria must be met for confirmation.
+        ULTRA-STRICT subscription detection.
+        FIXED: Prevent transfers from being classified as subscriptions.
         """
         
-        # Criterion 1: Is it a KNOWN subscription service?
+        # FIRST: Check if it's clearly a TRANSFER (highest priority)
+        # If it looks like a transfer, immediately reject subscription classification
+        transfer_indicators = [
+            'transfer', 'neft', 'rtgs', 'imps', 'sent', 'payme', 'payment to',
+            'fund transfer', 'self', 'own account', 'wallet'
+        ]
+        
+        # Check if it's a phone number (10 digits) - clear transfer
+        if recipient_name.isdigit() and len(recipient_name) == 10:
+            return False  # Phone number UPI = Transfer, NOT subscription
+        
+        # Check for transfer keywords
+        if any(kw in combined_text.lower() or kw in note.lower() for kw in transfer_indicators):
+            return False  # Has transfer keywords = NOT a subscription
+        
+        # Check if recipient looks like a person name (5-20 chars, no business keywords)
+        business_keywords = ['pvr', 'inox', 'netflix', 'spotify', 'hotstar', 'prime', 
+                            'swiggy', 'zomato', 'uber', 'ola', 'flipkart', 'amazon']
+        recipient_is_person = (
+            5 <= len(recipient_name) <= 20 and
+            not any(biz in recipient_name.lower() for biz in business_keywords) and
+            not recipient_name.lower().endswith('upi')
+        )
+        if recipient_is_person:
+            return False  # Person name = Transfer, NOT subscription
+        
+        # NOW check if it's a KNOWN subscription service
         is_known_service = False
         for service in self.known_subscriptions:
             if service in combined_text or service in recipient_name or service in upi_id:
                 is_known_service = True
                 break
         
-        # If NOT a known service, apply STRICT checks
+        # If NOT a known service, apply ULTRA-STRICT checks
         if not is_known_service:
-            # Check for explicit subscription keywords
-            explicit_keywords = ['subscription', 'membership', 'premium', 'renewal']
-            has_explicit_keyword = any(kw in combined_text or kw in note for kw in explicit_keywords)
+            # Need MULTIPLE explicit subscription keywords (not just one)
+            explicit_keywords = ['subscription', 'membership', 'premium plan', 'renewal', 'recurring']
+            keyword_count = sum(1 for kw in explicit_keywords if kw in combined_text or kw in note)
             
-            if not has_explicit_keyword:
-                # NOT a known service AND no explicit keywords → NOT a subscription
-                return False
+            if keyword_count < 2:  # Need at least 2 explicit keywords
+                return False  # NOT enough evidence for subscription
         
         # Criterion 2: Subscription amount pattern (₹50 - ₹3000 typical range)
         # Outside this range needs more evidence
@@ -269,33 +329,52 @@ class RuleBasedDetector:
     
     def _is_transfer(self, combined_text: str, recipient_name: str, 
                     amount: float, txn_type: str) -> bool:
-        """Detect fund transfers - person-to-person payments."""
-        # Check for transfer keywords
+        """
+        Detect fund transfers - person-to-person payments.
+        ENHANCED: More comprehensive transfer detection.
+        """
+        # Strategy 1: Explicit transfer keywords
         transfer_keywords = [
-            'transfer', 'neft', 'rtgs', 'imps', 'upi', 'self', 
-            'own account', 'wallet', 'fund transfer', 'inter account',
-            'sent', 'payme', 'payment to'
+            'transfer', 'neft', 'rtgs', 'imps', 'sent', 'payme', 'payment to',
+            'fund transfer', 'self', 'own account', 'wallet', 'inter account',
+            'send money', 'money sent', 'paid to', 'p2p', 'person to person'
         ]
+        has_transfer_keyword = any(kw in combined_text.lower() for kw in transfer_keywords)
         
-        has_transfer_keyword = any(kw in combined_text for kw in transfer_keywords)
-        
-        # Check if recipient looks like a person name (not a business)
-        # Person names are typically 5-15 characters, not in known_subscriptions
-        recipient_looks_like_person = (
-            len(recipient_name) >= 5 and 
-            len(recipient_name) <= 15 and
-            recipient_name not in self.known_subscriptions and
-            not any(business in recipient_name for business in ['pvr', 'inox', 'swiggy', 'zomato', 'uber'])
-        )
-        
-        # Check if it's a phone number (UPI via phone)
+        # Strategy 2: Phone number (UPI via phone) - STRONG indicator
         is_phone_number = recipient_name.isdigit() and len(recipient_name) == 10
         
-        # Transfer if:
-        # - Has transfer keyword OR
-        # - Recipient looks like person name OR
-        # - Is phone number transfer
-        return has_transfer_keyword or recipient_looks_like_person or is_phone_number
+        # Strategy 3: Check if recipient looks like a person name (not a business)
+        business_keywords = [
+            'pvr', 'inox', 'swiggy', 'zomato', 'uber', 'ola', 'rapido',
+            'netflix', 'spotify', 'hotstar', 'prime', 'amazon', 'flipkart',
+            'paytm', 'phonepe', 'googlepay', 'bhim', 'upi',
+            'mall', 'store', 'shop', 'mart', 'cafe', 'restaurant'
+        ]
+        
+        recipient_looks_like_person = (
+            5 <= len(recipient_name) <= 20 and  # Person name length
+            not any(biz in recipient_name.lower() for biz in business_keywords) and
+            not recipient_name.lower().endswith('upi') and
+            not recipient_name.lower().endswith('pay') and
+            recipient_name not in self.known_subscriptions
+        )
+        
+        # Strategy 4: Common person name patterns (Indian names)
+        common_name_parts = [
+            'kumar', 'sharma', 'singh', 'verma', 'gupta', 'patel', 'shah',
+            'rajesh', 'suresh', 'ramesh', 'mahesh', 'dinesh', 'vijay',
+            'amit', 'ankit', 'rohit', 'priya', 'pooja', 'neha', 'ravi'
+        ]
+        has_common_name = any(name in recipient_name.lower() for name in common_name_parts)
+        
+        # Transfer if ANY of these conditions are met:
+        return (
+            has_transfer_keyword or 
+            is_phone_number or 
+            recipient_looks_like_person or 
+            has_common_name
+        )
     
     def validate_category(self, category: str) -> str:
         """Ensure category is in fixed list."""

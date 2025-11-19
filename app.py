@@ -353,11 +353,15 @@ with tab1:
                         
                         if use_layer8:
                             # Last resort: zero-shot classification
+                            # ROBUST: Pass UPI fields to Layer 8 for better zero-shot classification
                             zeroshot_result = zeroshot_classifier.classify(
                                 description=text,
                                 merchant=row.get('merchant', ''),
                                 amount=row['amount'],
-                                txn_type=row.get('type', '')
+                                txn_type=row.get('type', ''),
+                                recipient_name=recipient_name,
+                                upi_id=upi_id,
+                                note=note
                             )
                         
                         # Layer 7: Final Classification

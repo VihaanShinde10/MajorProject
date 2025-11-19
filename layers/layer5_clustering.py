@@ -7,6 +7,10 @@ from typing import Tuple, Optional, Dict, List
 from collections import Counter
 
 class BehavioralClusterer:
+    """
+    Layer 5: Behavioral clustering using HDBSCAN.
+    ROBUST: Works with behavioral features extracted from UPI-enhanced merchant tracking.
+    """
     def __init__(self):
         self.clusterer = None
         self.scaler = StandardScaler()
@@ -32,7 +36,10 @@ class BehavioralClusterer:
         ]
     
     def fit(self, features_df: pd.DataFrame, categories: List[str] = None):
-        """Fit HDBSCAN on behavioral features."""
+        """
+        Fit HDBSCAN on behavioral features.
+        ROBUST: Features include merchant_frequency derived from recipient_name (UPI).
+        """
         # Handle NaN values - fill with 0 or median
         features_clean = features_df.copy()
         

@@ -61,27 +61,35 @@ class ZeroShotClassifier:
                 description: str, 
                 merchant: str = '', 
                 amount: float = None,
-                txn_type: str = '') -> Tuple[Optional[str], float, Dict]:
+                txn_type: str = '',
+                recipient_name: str = None,
+                upi_id: str = None,
+                note: str = None) -> Tuple[Optional[str], float, Dict]:
         """
         Zero-shot classification of transaction.
+        ROBUST: Prioritizes recipient_name, upi_id, and note fields.
         
         Args:
             description: Transaction description
             merchant: Merchant name
             amount: Transaction amount (optional, for context)
             txn_type: Transaction type (credit/debit)
+            recipient_name: UPI recipient name (PRIORITY)
+            upi_id: UPI ID (PRIORITY)
+            note: Transaction note (PRIORITY)
             
         Returns:
             (category, confidence, provenance)
         """
-        if not description and not merchant:
+        if not any([description, merchant, recipient_name, upi_id, note]):
             return None, 0.0, {'reason': 'No text to classify'}
         
         # Load model if not loaded
         self._load_model()
         
-        # Construct premise (what we're classifying)
-        premise = self._construct_premise(description, merchant, amount, txn_type)
+        # Construct premise (what we're classifying) - ROBUST with UPI fields
+        premise = self._construct_premise(description, merchant, amount, txn_type, 
+                                         recipient_name, upi_id, note)
         
         try:
             # Run zero-shot classification
@@ -131,18 +139,23 @@ class ZeroShotClassifier:
                          description: str,
                          merchant: str = '',
                          amount: float = None,
-                         txn_type: str = '') -> Tuple[Optional[str], float, Dict]:
+                         txn_type: str = '',
+                         recipient_name: str = None,
+                         upi_id: str = None,
+                         note: str = None) -> Tuple[Optional[str], float, Dict]:
         """
         Alternative: Use NLI (Natural Language Inference) approach.
         Tests entailment between transaction and each category hypothesis.
+        ROBUST: Prioritizes recipient_name, upi_id, and note fields.
         """
-        if not description and not merchant:
+        if not any([description, merchant, recipient_name, upi_id, note]):
             return None, 0.0, {'reason': 'No text to classify'}
         
         self._load_model()
         
-        # Construct premise
-        premise = self._construct_premise(description, merchant, amount, txn_type)
+        # Construct premise - ROBUST with UPI fields
+        premise = self._construct_premise(description, merchant, amount, txn_type,
+                                         recipient_name, upi_id, note)
         
         try:
             # Test entailment for each category
@@ -188,19 +201,44 @@ class ZeroShotClassifier:
                           description: str,
                           merchant: str,
                           amount: float,
-                          txn_type: str) -> str:
-        """Construct premise text from transaction details."""
+                          txn_type: str,
+                          recipient_name: str = None,
+                          upi_id: str = None,
+                          note: str = None) -> str:
+        """
+        Construct premise text from transaction details.
+        ROBUST: Prioritizes recipient_name, upi_id, and note fields FIRST.
+        """
         parts = []
         
-        if merchant:
+        # Priority 1: RECIPIENT_NAME (most informative for UPI)
+        if recipient_name and recipient_name not in ['', 'nan', 'none', 'None']:
+            parts.append(f"Recipient: {recipient_name}")
+        
+        # Priority 2: NOTE (provides category context)
+        if note and note not in ['', 'nan', 'none', 'None', 'upi', 'UPI']:
+            parts.append(f"Note: {note}")
+        
+        # Priority 3: UPI_ID (contains merchant identifier)
+        if upi_id and upi_id not in ['', 'nan', 'none', 'None']:
+            # Extract alphabetic part for readability
+            upi_base = ''.join([c for c in str(upi_id) if c.isalpha()])
+            if upi_base and len(upi_base) > 3:
+                parts.append(f"UPI ID: {upi_base}")
+        
+        # Priority 4: Merchant (fallback)
+        if merchant and merchant not in ['', 'nan', 'none']:
             parts.append(f"Merchant: {merchant}")
         
-        if description and description != merchant:
+        # Priority 5: Description (if different from merchant)
+        if description and description not in ['', 'nan', 'none'] and description != merchant:
             parts.append(f"Description: {description}")
         
+        # Priority 6: Amount
         if amount is not None:
             parts.append(f"Amount: ₹{amount:.2f}")
         
+        # Priority 7: Transaction type
         if txn_type:
             parts.append(f"Type: {txn_type}")
         
@@ -209,9 +247,11 @@ class ZeroShotClassifier:
     def batch_classify(self, transactions: List[Dict]) -> List[Tuple[Optional[str], float, Dict]]:
         """
         Classify multiple transactions in batch.
+        ROBUST: Includes UPI fields in classification.
         
         Args:
-            transactions: List of dicts with keys: description, merchant, amount, type
+            transactions: List of dicts with keys: description, merchant, amount, type,
+                         recipient_name, upi_id, note
             
         Returns:
             List of (category, confidence, provenance) tuples
@@ -223,7 +263,10 @@ class ZeroShotClassifier:
                 description=txn.get('description', ''),
                 merchant=txn.get('merchant', ''),
                 amount=txn.get('amount'),
-                txn_type=txn.get('type', '')
+                txn_type=txn.get('type', ''),
+                recipient_name=txn.get('Recipient_Name', txn.get('recipient_name')),
+                upi_id=txn.get('UPI_ID', txn.get('upi_id')),
+                note=txn.get('Note', txn.get('note'))
             )
             results.append(result)
         

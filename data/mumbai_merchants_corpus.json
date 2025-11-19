@@ -7,185 +7,263 @@
       "sarvi", "aaswad", "shree thaker bhojanalay", "gulshan", "kyani", "kayani",
       "swati snacks", "candies", "smoke house deli", "pizza express", "social",
       "toit", "the pantry", "indigo deli", "leopold cafe", "mondegar", "bade miya",
-      "julfikar", "bikaner", "bikanervala", "snowcre", "snowcreat"
+      "julfikar", "bikaner", "bikanervala", "snowcre", "snowcreat", "haldiram", "haldirams",
+      "baskin robbins", "dunkin donuts", "popeyes", "taco bell", "wendy", "chipotle",
+      "five guys", "hard rock cafe", "chilis", "tgif", "fridays", "nandos", "nando",
+      "barbeque nation", "absolute barbecues", "mainland china", "oh calcutta", "punjabi by nature",
+      "sigree", "farzi cafe", "monkey bar", "hard rock", "brewbot", "beer cafe",
+      "salt water cafe", "suzette", "koko", "ellipsis", "the glass house", "gazebo"
     ],
     "food_delivery": [
       "swiggy", "zomato", "uber eats", "ubereats", "dunzo", "freshmenu", "faasos",
-      "behrouz biryani", "oven story"
+      "behrouz biryani", "oven story", "box8", "lunchbox", "zomato gold", "dineout",
+      "eatsure", "ovenstory", "biryani blues"
     ],
     "cafes": [
       "starbucks", "coffee day", "barista", "blue tokai", "third wave coffee",
-      "kala ghoda cafe", "prithvi cafe"
+      "kala ghoda cafe", "prithvi cafe", "costa coffee", "tim hortons", "dunkin",
+      "chaayos", "chai point", "tea post", "theobroma", "roastery coffee"
     ],
     "bakeries": [
-      "julfikar", "julfikar bakery", "baker", "bakery"
+      "julfikar", "julfikar bakery", "baker", "bakery", "monginis", "mongini",
+      "theobroma", "b merwan", "yazdani bakery", "hearsch bakery", "naturals ice cream"
     ],
-    "keywords": ["restaurant", "cafe", "hotel", "dine", "lunch", "dinner", "breakfast", "baker", "bakery"]
+    "groceries": [
+      "bigbasket", "big basket", "grofers", "blinkit", "swiggy instamart", "dunzo daily",
+      "zepto", "jiomart", "amazon fresh", "milkbasket"
+    ],
+    "keywords": ["restaurant", "cafe", "hotel", "dine", "lunch", "dinner", "breakfast", "baker", "bakery", "food", "meal"]
   },
   
   "Commute/Transport": {
     "fuel": [
       "bharat petroleum", "bpcl", "indian oil", "iocl", "hp", "hindustan petroleum", 
-      "hpcl", "shell", "reliance petroleum", "essar", "nayara"
+      "hpcl", "shell", "reliance petroleum", "essar", "nayara", "petrol pump", "fuel station"
     ],
     "transport": [
       "uber", "ola", "rapido", "meru", "fastrack", "best", "mumbai metro",
       "western railway", "central railway", "harbour line", "fastag", "paytm fastag",
-      "indian railways", "indianr", "irctc", "rail ticket"
+      "indian railways", "indianr", "irctc", "rail ticket", "blue smart", "yulu",
+      "bounce", "vogo", "quick ride", "metro card", "auto rickshaw"
+    ],
+    "airlines": [
+      "indigo", "air india", "spicejet", "vistara", "go first", "goair", "akasa air",
+      "air asia", "airasia", "emirates", "qatar airways", "lufthansa", "singapore airlines"
     ],
     "parking": [
-      "mumbai parking", "bmc parking", "parking fees", "paid parking"
+      "mumbai parking", "bmc parking", "parking fees", "paid parking", "park+"
     ],
-    "keywords": ["petrol", "diesel", "fuel", "gas", "taxi", "cab", "auto", "bus", "train", "metro", "toll"]
+    "ev_charging": [
+      "tata power ev", "charge zone", "ather", "jio bp pulse", "fortum charge"
+    ],
+    "keywords": ["petrol", "diesel", "fuel", "gas", "taxi", "cab", "auto", "bus", "train", "metro", "toll", "parking", "flight", "airline"]
   },
   
   "Shopping": {
     "online": [
       "amazon", "flipkart", "myntra", "ajio", "nykaa", "tata cliq", "meesho",
-      "snapdeal", "firstcry", "pepperfry", "urban ladder", "big basket", "grofers"
+      "snapdeal", "firstcry", "pepperfry", "urban ladder", "bigbasket", "big basket", "grofers",
+      "bewakoof", "ajio", "jabong", "shein", "alibaba", "aliexpress", "ebay",
+      "shopsy", "shop101", "club factory", "limeroad", "lenskart", "purplle",
+      "sugar cosmetics", "mamaearth", "boat lifestyle", "boult audio"
     ],
     "retail": [
       "dmart", "reliance fresh", "reliance smart", "more", "hypercity", "spencer",
-      "big bazaar", "lifestyle", "westside", "pantaloons", "max fashion",
-      "zara", "h&m", "uniqlo", "decathlon"
+      "big bazaar", "lifestyle", "westside", "pantaloons", "max fashion", "central",
+      "zara", "h&m", "hm", "uniqlo", "decathlon", "marks spencer", "marks and spencer",
+      "forever 21", "tommy hilfiger", "nike", "adidas", "puma", "reebok", "fila",
+      "uspa", "allen solly", "peter england", "van heusen", "louis philippe", "arrow"
     ],
     "electronics": [
       "croma", "vijay sales", "reliance digital", "poorvika", "bajaj electronics",
-      "metro cash", "pai electronics"
+      "metro cash", "pai electronics", "ezone", "samsung", "apple", "mi store",
+      "oneplus", "vivo", "oppo", "realme", "redmi"
     ],
     "malls": [
       "phoenix market city", "inorbit", "infinity mall", "atria mall", "rcity",
-      "seawoods grand central", "oberoi mall", "growel", "raghuleela"
+      "seawoods grand central", "oberoi mall", "growel", "raghuleela", "viviana mall",
+      "tmt", "thane mall", "korum mall", "r mall"
     ],
-    "keywords": ["shopping", "purchase", "retail", "store", "mart", "mall"]
+    "jewelry": [
+      "tanishq", "malabar gold", "kalyan jewellers", "pc jeweller", "joyalukkas",
+      "bhima jewellers", "tribhovandas bhimji zaveri", "tbz", "png jewellers", "grt"
+    ],
+    "keywords": ["shopping", "purchase", "retail", "store", "mart", "mall", "shop", "buy"]
   },
   
   "Bills & Utilities": {
     "electricity": [
       "best", "adani electricity", "tata power", "reliance energy", "reliance power",
-      "msedcl", "mahadiscom"
+      "msedcl", "mahadiscom", "electric bill", "electricity board"
     ],
     "telecom": [
-      "airtel", "jio", "vodafone", "vodafone idea", "vi", "bsnl", "mtnl"
+      "airtel", "jio", "reliance jio", "vodafone", "vodafone idea", "vi", "bsnl", "mtnl",
+      "mobile recharge", "prepaid", "postpaid"
     ],
     "broadband": [
-      "jio fiber", "airtel xstream", "tata sky broadband", "hathway", "tikona",
-      "you broadband", "act fibernet", "spectra"
+      "jio fiber", "airtel xstream", "airtel fiber", "tata sky broadband", "hathway", "tikona",
+      "you broadband", "act fibernet", "spectra", "den broadband", "excitel"
     ],
     "gas": [
-      "mahanagar gas", "mgl", "indane gas", "hp gas", "bharat gas"
+      "mahanagar gas", "mgl", "indane gas", "hp gas", "bharat gas", "lpg cylinder"
     ],
     "water": [
-      "bmc water", "mumbai water", "water tax", "property tax"
+      "bmc water", "mumbai water", "water tax", "property tax", "water bill"
     ],
     "dth": [
-      "tata sky", "dish tv", "airtel digital", "sun direct"
+      "tata sky", "tata play", "dish tv", "airtel digital", "sun direct", "d2h"
     ],
-    "keywords": ["electricity", "bill", "utility", "water", "gas", "broadband", "internet", "mobile recharge", "dth"]
+    "insurance": [
+      "lic", "hdfc life", "icici prudential", "sbi life", "max life", "bajaj allianz",
+      "star health", "care health", "niva bupa", "religare", "national insurance"
+    ],
+    "keywords": ["electricity", "bill", "utility", "water", "gas", "broadband", "internet", "mobile recharge", "dth", "insurance", "premium"]
   },
   
   "Entertainment": {
     "movies": [
       "pvr", "inox", "cinepolis", "carnival", "imax", "movie time", "bookmyshow",
-      "paytm movies"
+      "paytm movies", "multiplex", "cinema"
     ],
     "events": [
-      "bookmyshow", "insider", "paytm insider", "allevents", "townscript"
+      "bookmyshow", "insider", "paytm insider", "allevents", "townscript", "meraevents",
+      "event high", "zomato live"
     ],
     "gaming": [
-      "steam", "playstation", "xbox", "nintendo", "google play", "app store",
-      "epic games", "riot games"
+      "steam", "playstation", "psn", "ps store", "xbox", "microsoft store", "nintendo",
+      "google play", "app store", "epic games", "riot games", "valorant", "pubg",
+      "codm", "free fire", "battle pass", "riot", "supercell", "clash of clans",
+      "clash royale", "mobile legends", "genshin", "garena"
     ],
     "attractions": [
-      "imagicaa", "imagica", "essel world", "water kingdom", "wonderla"
+      "imagicaa", "imagica", "essel world", "water kingdom", "wonderla", "adlabs"
     ],
-    "keywords": ["movie", "cinema", "theater", "show", "concert", "event", "game", "amusement", "park"]
+    "sports": [
+      "cult.fit", "cultfit", "gold gym", "fitness first", "talwalkars", "snap fitness",
+      "anytime fitness", "la fitness", "crossfit", "yoga studio"
+    ],
+    "keywords": ["movie", "cinema", "theater", "show", "concert", "event", "game", "gaming", "amusement", "park", "gym", "fitness"]
   },
   
   "Healthcare": {
     "hospitals": [
       "breach candy", "jaslok", "lilavati", "hinduja", "kokilaben", "nanavati",
       "wockhardt", "saifee", "holy family", "fortis", "apollo", "cloudnine",
-      "hiranandani", "jupiter", "criticare"
+      "hiranandani", "jupiter", "criticare", "bhatia", "bombay hospital",
+      "prince aly khan", "masina", "pd hinduja", "kj somaiya"
     ],
     "pharmacies": [
-      "apollo pharmacy", "netmeds", "medplus", "1mg", "pharmeasy", "practo",
-      "wellness forever"
+      "apollo pharmacy", "netmeds", "medplus", "1mg", "onemg", "pharmeasy", "practo",
+      "wellness forever", "medicine", "chemist", "pharmacy", "medical store"
     ],
     "diagnostics": [
-      "thyrocare", "dr lal path lab", "suburban diagnostics", "metropolis",
-      "srl diagnostics", "path lab"
+      "thyrocare", "dr lal pathlabs", "lal path lab", "suburban diagnostics", "metropolis",
+      "srl diagnostics", "path lab", "healthians", "redcliffe labs", "mydiagnostics"
     ],
-    "keywords": ["hospital", "clinic", "doctor", "medical", "pharmacy", "medicine", "lab", "test", "diagnostic"]
+    "telemedicine": [
+      "practo", "apollo 24/7", "tata 1mg", "mfine", "lybrate", "docprime"
+    ],
+    "keywords": ["hospital", "clinic", "doctor", "medical", "pharmacy", "medicine", "lab", "test", "diagnostic", "consultation"]
   },
   
   "Education": {
     "schools": [
       "dhirubhai ambani", "jamnabai narsee", "bombay scottish", "cathedral",
-      "campion", "st xavier", "podar", "ryan international", "vibgyor"
+      "campion", "st xavier", "podar", "ryan international", "vibgyor", "dps",
+      "jbcn", "oberoi international", "ecole mondiale"
     ],
     "coaching": [
       "byjus", "byju", "vedantu", "unacademy", "allen", "fiitjee", "time",
-      "ies", "career launcher", "triumphias"
+      "ies", "career launcher", "triumphias", "toppr", "meritnation", "extramarks",
+      "aakash", "resonance", "narayana", "sri chaitanya", "physicswallah", "pw"
     ],
     "universities": [
       "mumbai university", "iit bombay", "vjti", "nmims", "sp jain", "jbims",
-      "sies", "kjsomaiya", "ruia", "jai hind"
+      "sies", "kjsomaiya", "ruia", "jai hind", "mithibai", "hr college"
     ],
-    "keywords": ["school", "college", "university", "education", "course", "tuition", "coaching", "fees"]
+    "online_courses": [
+      "coursera", "udemy", "skillshare", "linkedin learning", "pluralsight", "datacamp",
+      "codeacademy", "khan academy", "great learning", "upgrad", "simplilearn"
+    ],
+    "keywords": ["school", "college", "university", "education", "course", "tuition", "coaching", "fees", "admission", "exam"]
   },
   
   "Subscriptions": {
     "streaming": [
-      "netflix", "amazon prime", "disney", "hotstar", "zee5", "sonyliv",
-      "voot", "alt balaji", "mx player", "jio cinema", "apple tv", "youtube premium"
+      "netflix", "netflixupi", "amazon prime", "prime video", "disney", "disney plus",
+      "hotstar", "disney hotstar", "zee5", "sonyliv", "voot", "voot select",
+      "alt balaji", "altbalaji", "mx player", "jio cinema", "apple tv", "apple tv plus",
+      "youtube premium", "youtube music premium", "aha", "hoichoi", "lionsgate play"
     ],
     "music": [
-      "spotify", "apple music", "gaana", "jio saavn", "amazon music", "youtube music"
+      "spotify", "apple music", "gaana", "jio saavn", "jiosaavn", "saavn",
+      "amazon music", "youtube music", "wynk", "hungama", "tidal"
     ],
     "news": [
-      "times of india", "indian express", "hindu", "mint", "economic times"
+      "times of india", "toi", "indian express", "hindu", "the hindu", "mint",
+      "economic times", "et", "business standard", "newslaundry", "scroll", "quint",
+      "the wire", "caravan", "bloomberg", "reuters", "wall street journal"
     ],
     "cloud": [
-      "google one", "icloud", "microsoft 365", "office 365", "dropbox", "adobe"
+      "google one", "icloud", "microsoft 365", "office 365", "dropbox", "adobe",
+      "adobe creative cloud", "canva pro", "notion", "evernote", "grammarly"
     ],
-    "keywords": ["subscription", "membership", "premium", "monthly", "annual", "recurring"]
+    "professional": [
+      "linkedin premium", "medium", "medium membership", "quora plus", "reddit premium",
+      "twitter blue", "scribd", "audible", "kindle unlimited", "upwork"
+    ],
+    "dating": [
+      "tinder", "tinder plus", "tinder gold", "bumble", "bumble boost", "hinge",
+      "truly madly", "shaadi", "jeevansathi", "bharat matrimony"
+    ],
+    "keywords": ["subscription", "membership", "premium", "monthly", "annual", "recurring", "plan", "pro"]
   },
   
   "Investments": {
     "mutual_funds": [
-      "zerodha", "groww", "upstox", "paytm money", "et money", "kuvera",
+      "zerodha", "zerodha coin", "groww", "upstox", "paytm money", "et money", "kuvera",
       "hdfc mutual fund", "icici prudential", "sbi mutual fund", "axis mutual fund",
-      "nippon india", "motilal oswal", "aditya birla"
+      "nippon india", "motilal oswal", "aditya birla", "birla sun life", "franklin templeton",
+      "dsp", "kotak mutual fund", "mirae asset", "ppfas", "uti"
     ],
     "stocks": [
-      "zerodha", "upstox", "angel broking", "angel one", "icici direct", 
-      "hdfc securities", "kotak securities", "sharekhan", "5paisa"
+      "zerodha", "zerodha kite", "upstox", "angel broking", "angel one", "icici direct", 
+      "hdfc securities", "kotak securities", "sharekhan", "5paisa", "paytm money",
+      "groww", "edelweiss", "motilal oswal", "axis direct"
     ],
     "digital_gold": [
-      "paytm gold", "google pay gold", "phonepe gold", "jar", "mmtc pamp"
+      "paytm gold", "google pay gold", "phonepe gold", "gpay gold", "jar", "jar app",
+      "mmtc pamp", "safegold", "augmont"
     ],
-    "keywords": ["mutual fund", "sip", "investment", "stock", "equity", "gold", "trading", "demat"]
+    "crypto": [
+      "wazirx", "coinswitch", "coinswitch kuber", "coindcx", "zebpay", "buyucoin",
+      "binance", "unocoin", "giottus"
+    ],
+    "keywords": ["mutual fund", "mf", "sip", "systematic investment", "investment", "stock", "equity", "gold", "trading", "demat", "crypto", "bitcoin"]
   },
   
   "Transfers": {
     "banks": [
-      "hdfc", "icici", "sbi", "axis", "kotak", "yes bank", "indusind", "rbl",
-      "federal", "idfc", "standard chartered", "hsbc", "dbs", "citibank"
+      "hdfc", "hdfc bank", "icici", "icici bank", "sbi", "state bank", "axis", "axis bank",
+      "kotak", "kotak mahindra", "yes bank", "indusind", "indusind bank", "rbl", "rbl bank",
+      "federal", "federal bank", "idfc", "idfc first", "standard chartered", "hsbc",
+      "dbs", "citibank", "citi", "punjab national", "pnb", "bank of baroda", "bob",
+      "canara bank", "union bank", "bank of india", "boi", "indian bank"
     ],
     "payment_apps": [
-      "paytm", "phonepe", "google pay", "gpay", "amazon pay", "mobikwik",
-      "freecharge", "bhim", "whatsapp pay"
+      "paytm", "phonepe", "phone pe", "google pay", "gpay", "googlepay", "amazon pay",
+      "amazonpay", "mobikwik", "freecharge", "bhim", "whatsapp pay", "cred", "slice"
     ],
     "people_names": [
       "vinayak", "anushka", "shubham", "venkates", "aashay", "harshba", 
-      "alphavi", "mayabha", "bhartia", "imagicaa"
+      "alphavi", "mayabha", "bhartia", "rajesh", "suresh", "ramesh", "mahesh",
+      "dinesh", "vijay", "amit", "rohit", "priya", "neha", "pooja", "ravi",
+      "kumar", "sharma", "singh", "verma", "gupta", "patel", "shah"
     ],
-    "keywords": ["transfer", "neft", "rtgs", "imps", "upi", "wallet", "self transfer", "fund transfer", "sent", "payme", "payment"]
+    "keywords": ["transfer", "neft", "rtgs", "imps", "upi", "wallet", "self transfer", "fund transfer", "sent", "payme", "payment", "send money"]
   },
   
   "Salary/Income": {
-    "keywords": ["salary", "wages", "payroll", "income", "earnings", "remuneration", "stipend", "honorarium"]
+    "keywords": ["salary", "wages", "payroll", "income", "earnings", "remuneration", "stipend", "honorarium", "credit", "deposit", "refund"]
   }
 }
-

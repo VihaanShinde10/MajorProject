@@ -28,7 +28,10 @@ class SemanticSearcher:
         ]
     
     def build_index(self, embeddings: np.ndarray, labels: List[str], metadata: List[Dict]):
-        """Build FAISS index from embeddings."""
+        """
+        Build FAISS index from embeddings.
+        ROBUST: Stores metadata about UPI field matching for better provenance.
+        """
         if embeddings.shape[1] != self.embedding_dim:
             raise ValueError(f"Expected {self.embedding_dim}-dim embeddings")
         
@@ -39,7 +42,7 @@ class SemanticSearcher:
         self.index = faiss.IndexFlatIP(self.embedding_dim)
         self.index.add(embeddings.astype('float32'))
         self.labels = validated_labels
-        self.metadata = metadata
+        self.metadata = metadata  # Now includes 'matched_source' from Layer 1
     
     def search(self, query_embedding: np.ndarray, k: int = 20) -> Tuple[Optional[str], float, Dict]:
         """
@@ -59,45 +62,46 @@ class SemanticSearcher:
         top_labels = [self.labels[idx] for idx in indices[0]]
         top_sims = similarities[0]
         
-        # Strategy 1: Very strong single match (NEW - for early transactions)
-        if len(top_labels) >= 1 and top_sims[0] >= 0.92:
-            # Extremely high similarity - likely exact or near-exact match
-            return top_labels[0], 0.90, {
-                'method': 'very_strong_match',
-                'top_match': (top_labels[0], float(top_sims[0])),
-                'matches': [(label, float(sim)) for label, sim in zip(top_labels[:3], top_sims[:3])],
-                'reason': f'Very strong semantic match ({top_sims[0]:.3f} similarity)'
-            }
-        
-        # Strategy 2: Unanimous top-3 with HIGH similarity (LOWERED thresholds)
+        # Strategy 1: Unanimous top-3 with HIGH similarity (strictest)
         if len(top_labels) >= 3:
             top3_labels = top_labels[:3]
             top3_sims = top_sims[:3]
+            top3_indices = indices[0][:3]
             
-            # All 3 must match AND have good similarity
-            if len(set(top3_labels)) == 1 and top3_sims[0] >= 0.80 and top3_sims[2] >= 0.65:
-                return top3_labels[0], 0.88, {
-                    'method': 'unanimous_top3',
+            # All 3 must match AND have high similarity
+            if len(set(top3_labels)) == 1 and top3_sims[0] >= 0.85 and top3_sims[2] >= 0.75:
+                # Check if top match has UPI field metadata
+                top_metadata = self.metadata[top3_indices[0]] if top3_indices[0] < len(self.metadata) else {}
+                matched_source = top_metadata.get('matched_source', 'unknown')
+                
+                return top3_labels[0], 0.95, {
+                    'method': 'unanimous_top3_strict',
                     'top_match': (top3_labels[0], float(top3_sims[0])),
                     'matches': [(label, float(sim)) for label, sim in zip(top3_labels, top3_sims)],
-                    'reason': f'Top 3 unanimous ({top3_sims[0]:.3f} similarity)'
+                    'matched_source': matched_source,  # NEW: Track UPI field match
+                    'reason': f'Top 3 unanimous ({top3_sims[0]:.3f} similarity, source: {matched_source})'
                 }
         
-        # Strategy 3: Strong majority in top-10 (LOWERED thresholds)
+        # Strategy 2: Strong majority in top-10 (6+ out of 10)
         if len(top_labels) >= 10:
             top10_labels = top_labels[:10]
             top10_sims = top_sims[:10]
+            top10_indices = indices[0][:10]
             
             label_counts = Counter(top10_labels)
             most_common_label, count = label_counts.most_common(1)[0]
             
             # At least 6/10 match AND first result is reasonably similar
-            if count >= 6 and top10_sims[0] >= 0.68:  # Lowered from 0.75
+            if count >= 6 and top10_sims[0] >= 0.75:
                 # Calculate average similarity for matching labels
                 matching_sims = [top10_sims[i] for i, lbl in enumerate(top10_labels) if lbl == most_common_label]
                 avg_sim = np.mean(matching_sims)
                 
-                confidence = 0.78 if count >= 7 else 0.68
+                confidence = 0.80 if count >= 7 else 0.70
+                
+                # Check top match metadata
+                top_metadata = self.metadata[top10_indices[0]] if top10_indices[0] < len(self.metadata) else {}
+                matched_source = top_metadata.get('matched_source', 'unknown')
                 
                 return most_common_label, confidence, {
                     'method': 'majority_top10',
@@ -105,22 +109,28 @@ class SemanticSearcher:
                     'matches': [(label, float(sim)) for label, sim in zip(top10_labels, top10_sims)],
                     'majority_count': count,
                     'avg_similarity': float(avg_sim),
-                    'reason': f'Strong majority ({count}/10, avg sim: {avg_sim:.3f})'
+                    'matched_source': matched_source,  # NEW: Track UPI field match
+                    'reason': f'Strong majority ({count}/10, avg sim: {avg_sim:.3f}, source: {matched_source})'
                 }
         
-        # Strategy 4: Super strong top-5 majority (LOWERED thresholds)
+        # Strategy 3: Super strong top-5 majority
         if len(top_labels) >= 5:
             top5_labels = top_labels[:5]
             top5_sims = top_sims[:5]
+            top5_indices = indices[0][:5]
             
             label_counts = Counter(top5_labels)
             most_common_label, count = label_counts.most_common(1)[0]
             
             # 4 or 5 out of 5 match with good similarity
-            if count >= 4 and top5_sims[0] >= 0.72:  # Lowered from 0.80
+            if count >= 4 and top5_sims[0] >= 0.80:
                 avg_sim = np.mean([top5_sims[i] for i, lbl in enumerate(top5_labels) if lbl == most_common_label])
                 
-                confidence = 0.80 if count == 5 else 0.72
+                confidence = 0.85 if count == 5 else 0.75
+                
+                # Check top match metadata
+                top_metadata = self.metadata[top5_indices[0]] if top5_indices[0] < len(self.metadata) else {}
+                matched_source = top_metadata.get('matched_source', 'unknown')
                 
                 return most_common_label, confidence, {
                     'method': 'strong_top5',
@@ -128,7 +138,8 @@ class SemanticSearcher:
                     'matches': [(label, float(sim)) for label, sim in zip(top5_labels, top5_sims)],
                     'majority_count': count,
                     'avg_similarity': float(avg_sim),
-                    'reason': f'Strong top-5 consensus ({count}/5, avg sim: {avg_sim:.3f})'
+                    'matched_source': matched_source,  # NEW: Track UPI field match
+                    'reason': f'Strong top-5 consensus ({count}/5, avg sim: {avg_sim:.3f}, source: {matched_source})'
                 }
         
         # No consensus - return None (let other layers handle it)

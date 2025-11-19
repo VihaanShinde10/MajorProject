@@ -15,6 +15,7 @@ class E5Embedder:
               note: str = None, amount: float = None) -> np.ndarray:
         """
         Generate E5 embedding for transaction with enhanced UPI data.
+        ROBUST: Prioritizes recipient_name, upi_id, and note with HIGHER WEIGHT.
         
         Args:
             text: Normalized description/merchant text
@@ -29,34 +30,42 @@ class E5Embedder:
         if not text:
             text = ''
         
-        # Build rich context string
-        context_parts = [text]
+        # ROBUST STRATEGY: Build context with UPI fields FIRST and REPEATED for higher weight
+        context_parts = []
         
-        # Add recipient name (often most informative)
+        # Priority 1: Add RECIPIENT_NAME first (most reliable) - TRIPLE WEIGHT
         if recipient_name and not pd.isna(recipient_name):
             recipient_clean = str(recipient_name).strip()
-            if recipient_clean and recipient_clean.lower() not in text.lower():
-                context_parts.append(recipient_clean)
+            if recipient_clean and recipient_clean not in ['', 'nan', 'none']:
+                # Add 3 times for higher semantic weight
+                context_parts.extend([recipient_clean, recipient_clean, recipient_clean])
         
-        # Add note (provides category hints)
+        # Priority 2: Add NOTE (provides category hints) - DOUBLE WEIGHT
         if note and not pd.isna(note):
             note_clean = str(note).strip()
-            if note_clean and len(note_clean) > 2:
-                context_parts.append(note_clean)
+            if note_clean and len(note_clean) > 2 and note_clean not in ['', 'nan', 'none', 'upi']:
+                # Add twice for higher semantic weight
+                context_parts.extend([note_clean, note_clean])
         
-        # Add UPI ID (can contain merchant info)
+        # Priority 3: Add UPI_ID (contains merchant info) - DOUBLE WEIGHT
         if upi_id and not pd.isna(upi_id):
             upi_clean = str(upi_id).strip()
-            # Extract meaningful parts (e.g., "paytmqr" from "paytmqr1jc")
-            upi_base = ''.join([c for c in upi_clean if c.isalpha()])
-            if upi_base and len(upi_base) > 3 and upi_base not in text.lower():
-                context_parts.append(upi_base)
+            if upi_clean and upi_clean not in ['', 'nan', 'none']:
+                # Extract meaningful parts (e.g., "paytmqr" from "paytmqr1jc")
+                upi_base = ''.join([c for c in upi_clean if c.isalpha()])
+                if upi_base and len(upi_base) > 3:
+                    # Add twice for higher semantic weight
+                    context_parts.extend([upi_base, upi_base])
         
-        # Add transaction mode
+        # Priority 4: Add normalized text (fallback)
+        if text:
+            context_parts.append(text)
+        
+        # Priority 5: Add transaction mode
         if transaction_mode:
             context_parts.append(transaction_mode)
         
-        # Add amount range (for context: small/medium/large transaction)
+        # Priority 6: Add amount range (for context: small/medium/large transaction)
         if amount and amount > 0:
             if amount < 100:
                 context_parts.append("small payment")
@@ -67,7 +76,7 @@ class E5Embedder:
             else:
                 context_parts.append("very large transaction")
         
-        # Combine all context
+        # Combine all context (UPI fields now have 2-3x weight)
         rich_text = ' '.join(context_parts)
         
         # Check cache
@@ -91,6 +100,7 @@ class E5Embedder:
                     notes: List[str] = None, amounts: List[float] = None) -> np.ndarray:
         """
         Batch embedding for efficiency with enhanced UPI data.
+        ROBUST: Prioritizes recipient_name, upi_id, and note with HIGHER WEIGHT.
         """
         n = len(texts)
         if modes is None:
@@ -104,32 +114,40 @@ class E5Embedder:
         if amounts is None:
             amounts = [None] * n
         
-        # Build rich queries
+        # Build rich queries with UPI fields FIRST and WEIGHTED
         queries = []
         for i in range(n):
-            context_parts = [texts[i] if texts[i] else '']
+            context_parts = []
             
-            # Add recipient
+            # Priority 1: Add RECIPIENT (TRIPLE WEIGHT)
             if recipients[i] and not pd.isna(recipients[i]):
-                context_parts.append(str(recipients[i]).strip())
+                recipient_clean = str(recipients[i]).strip()
+                if recipient_clean and recipient_clean not in ['', 'nan', 'none']:
+                    context_parts.extend([recipient_clean, recipient_clean, recipient_clean])
             
-            # Add note
+            # Priority 2: Add NOTE (DOUBLE WEIGHT)
             if notes[i] and not pd.isna(notes[i]):
                 note_str = str(notes[i]).strip()
-                if len(note_str) > 2:
-                    context_parts.append(note_str)
+                if len(note_str) > 2 and note_str not in ['', 'nan', 'none', 'upi']:
+                    context_parts.extend([note_str, note_str])
             
-            # Add UPI ID base
+            # Priority 3: Add UPI ID base (DOUBLE WEIGHT)
             if upi_ids[i] and not pd.isna(upi_ids[i]):
-                upi_base = ''.join([c for c in str(upi_ids[i]) if c.isalpha()])
-                if len(upi_base) > 3:
-                    context_parts.append(upi_base)
+                upi_clean = str(upi_ids[i]).strip()
+                if upi_clean and upi_clean not in ['', 'nan', 'none']:
+                    upi_base = ''.join([c for c in upi_clean if c.isalpha()])
+                    if len(upi_base) > 3:
+                        context_parts.extend([upi_base, upi_base])
             
-            # Add mode
+            # Priority 4: Add normalized text
+            if texts[i]:
+                context_parts.append(texts[i])
+            
+            # Priority 5: Add mode
             if modes[i]:
                 context_parts.append(modes[i])
             
-            # Add amount context
+            # Priority 6: Add amount context
             if amounts[i] and amounts[i] > 0:
                 if amounts[i] < 100:
                     context_parts.append("small")
