@@ -18,6 +18,7 @@ from layers.layer4_behavioral_features import BehavioralFeatureExtractor
 from layers.layer5_clustering import BehavioralClusterer
 from layers.layer6_gating import GatingController
 from layers.layer7_classification import FinalClassifier
+from layers.transaction_cache import TransactionCache
 from metrics.metrics_tracker import MetricsTracker
 
 # Optional: Zero-shot classifier (BART-MNLI)
@@ -188,6 +189,10 @@ with tab1:
                     gating_controller = GatingController()
                     final_classifier = FinalClassifier()
                     
+                    # Initialize transaction cache for consistency
+                    transaction_cache = TransactionCache()
+                    status_text.text("✅ Transaction cache initialized (ensures consistency)")
+                    
                     # Initialize zero-shot if enabled
                     zeroshot_classifier = None
                     if use_zeroshot and ZEROSHOT_AVAILABLE:
@@ -246,6 +251,60 @@ with tab1:
                         
                         history = df[df.index < idx]
                         
+                        # Extract transaction key fields FIRST
+                        text = str(row.get('description', ''))
+                        recipient_name = row.get('recipient_name', None)
+                        upi_id = row.get('upi_id', None)
+                        note = row.get('note', None)
+                        amount = row.get('amount', 0.0)
+                        txn_type = row.get('type', '')
+                        
+                        # **CONSISTENCY CHECK**: Check if we've seen this EXACT transaction before
+                        cached_result = transaction_cache.get(
+                            recipient_name=recipient_name,
+                            upi_id=upi_id,
+                            note=note,
+                            description=text,
+                            amount=amount,
+                            txn_type=txn_type
+                        )
+                        
+                        if cached_result:
+                            # CACHED HIT: Use the exact same classification as before
+                            cached_category, cached_confidence, cached_reason, cached_layer = cached_result
+                            
+                            result = {
+                                'transaction_id': idx,
+                                'original_description': text,
+                                'normalized_text': text,  # Use cached
+                                'recipient_name': recipient_name if recipient_name and not pd.isna(recipient_name) else '',
+                                'upi_id': upi_id if upi_id and not pd.isna(upi_id) else '',
+                                'note': note if note and not pd.isna(note) else '',
+                                'amount': amount,
+                                'category': cached_category,
+                                'confidence': cached_confidence,
+                                'layer_used': cached_layer + ' (cached)',
+                                'reason': cached_reason + ' [CACHED - guaranteed consistent]',
+                                'should_prompt': False,
+                                'alpha': 1.0
+                            }
+                            
+                            results.append(result)
+                            
+                            # Log the cached prediction
+                            st.session_state.metrics_tracker.log_prediction(
+                                cached_category,
+                                cached_confidence,
+                                cached_layer + ' (cached)',
+                                alpha=1.0,
+                                merchant=row.get('merchant', ''),
+                                true_category=row.get('true_category', None)
+                            )
+                            
+                            continue  # Skip to next transaction - we already have the answer
+                        
+                        # NOT CACHED: Proceed with normal classification
+                        
                         # Rebuild semantic index periodically with classified transactions
                         if len(classified_embeddings) >= 10 and (idx % rebuild_frequency == 0 or idx == len(df) - 1):
                             status_text.text(f"Updating semantic index... ({len(classified_embeddings)} transactions)")
@@ -263,10 +322,6 @@ with tab1:
                         rule_result = rule_detector.detect(row, history)
                         
                         # Layer 1: Normalization (Enhanced with UPI fields)
-                        text = str(row.get('description', ''))
-                        recipient_name = row.get('recipient_name', None)
-                        upi_id = row.get('upi_id', None)
-                        note = row.get('note', None)
                         
                         normalized_text, norm_metadata = normalizer.normalize(
                             text, 
@@ -296,6 +351,21 @@ with tab1:
                                 'alpha': None
                             }
                             results.append(result)
+                            
+                            # **CACHE THE CANONICAL MATCH RESULT**
+                            transaction_cache.set(
+                                category=category,
+                                confidence=norm_metadata['canonical_confidence'],
+                                reason=f"Matched to known merchant: {canonical}",
+                                layer_used='L1: Canonical Match',
+                                recipient_name=recipient_name,
+                                upi_id=upi_id,
+                                note=note,
+                                description=text,
+                                amount=amount,
+                                txn_type=txn_type
+                            )
+                            
                             st.session_state.metrics_tracker.log_prediction(
                                 category, 
                                 norm_metadata['canonical_confidence'],
@@ -392,6 +462,20 @@ with tab1:
                         }
                         
                         results.append(result)
+                        
+                        # **CACHE THE RESULT** to ensure consistency for identical transactions
+                        transaction_cache.set(
+                            category=classification.category,
+                            confidence=classification.confidence,
+                            reason=classification.reason,
+                            layer_used=classification.layer_used,
+                            recipient_name=recipient_name,
+                            upi_id=upi_id,
+                            note=note,
+                            description=text,
+                            amount=amount,
+                            txn_type=txn_type
+                        )
                         
                         # Store for future index building (sequential learning)
                         if classification.confidence >= 0.60:  # Only store confident predictions

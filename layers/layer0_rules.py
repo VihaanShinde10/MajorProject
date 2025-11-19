@@ -147,19 +147,22 @@ class RuleBasedDetector:
     def _match_corpus(self, text: str) -> Optional[Tuple[str, float, str]]:
         """
         Match against Mumbai merchant corpus.
-        ULTRA-PRECISE: Word-boundary checking to prevent false matches like "burger" in "burgerking".
+        ULTRA-PRECISE + COMPREHENSIVE: 
+        - Word-boundary checking to prevent false matches
+        - MULTI-WORD ANALYSIS: Check EACH word in text individually
+        - Ensures EVERY word is considered for matching
         """
         text = text.lower().strip()
         
-        # Check for exact or word-boundary substring matches
+        # Strategy 1: Check the complete text
         matched_items = []
         for keyword, category in self.keyword_to_category.items():
-            # Strategy 1: Exact match (highest priority)
+            # Exact match (highest priority)
             if keyword == text:
-                matched_items.append((category, keyword, 1.0, True, True, True))
+                matched_items.append((category, keyword, 1.0, True, True, True, 'exact'))
                 continue
             
-            # Strategy 2: Substring with word boundaries
+            # Substring with word boundaries
             if keyword in text:
                 # Find the keyword position
                 keyword_start = text.find(keyword)
@@ -178,15 +181,45 @@ class RuleBasedDetector:
                     is_exact_match = (keyword == text)
                     is_dominant = (match_ratio > 0.5)
                     
-                    matched_items.append((category, keyword, match_ratio, is_exact_match, is_dominant, True))
+                    matched_items.append((category, keyword, match_ratio, is_exact_match, is_dominant, True, 'substring'))
+        
+        # Strategy 2: MULTI-WORD ANALYSIS - Check EACH word individually
+        # This ensures we don't miss keywords in multi-word transactions
+        # e.g., "payment to swiggy" → catches "swiggy"
+        words = text.split()
+        for word in words:
+            word_clean = word.strip()
+            if len(word_clean) < 3:  # Skip very short words
+                continue
+            
+            # Check if this word matches any keyword
+            for keyword, category in self.keyword_to_category.items():
+                # Exact word match
+                if keyword == word_clean:
+                    # Word match gets slightly lower confidence than full text match
+                    matched_items.append((category, keyword, 0.8, False, True, True, 'word_match'))
+                    continue
+                
+                # Word contains keyword with word boundaries
+                if keyword in word_clean and len(keyword) >= 4:
+                    keyword_start = word_clean.find(keyword)
+                    keyword_end = keyword_start + len(keyword)
+                    
+                    is_word_start = keyword_start == 0 or not word_clean[keyword_start-1].isalnum()
+                    is_word_end = keyword_end == len(word_clean) or not word_clean[keyword_end].isalnum()
+                    
+                    if is_word_start and is_word_end:
+                        match_ratio = len(keyword) / len(word_clean)
+                        if match_ratio > 0.5:  # Keyword is significant part of word
+                            matched_items.append((category, keyword, match_ratio * 0.7, False, True, True, 'word_partial'))
         
         if not matched_items:
             return None
         
-        # Sort by match quality (exact > word_boundary > dominant > ratio)
+        # Sort by match quality (exact > word_boundary > dominant > ratio > method)
         matched_items.sort(key=lambda x: (x[3], x[5], x[4], x[2]), reverse=True)
         
-        best_category, best_keyword, best_ratio, is_exact, is_dominant, is_word_boundary = matched_items[0]
+        best_category, best_keyword, best_ratio, is_exact, is_dominant, is_word_boundary, match_method = matched_items[0]
         
         # ULTRA-STRICT RULES: Only return for high-confidence matches
         
