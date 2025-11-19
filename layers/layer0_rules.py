@@ -100,7 +100,10 @@ class RuleBasedDetector:
         return None, 0.0, 'No rule matched'
     
     def _match_corpus(self, text: str) -> Optional[Tuple[str, float, str]]:
-        """Match against Mumbai merchant corpus."""
+        """
+        Match against Mumbai merchant corpus.
+        IMPROVED: More selective - only return for HIGH CONFIDENCE matches.
+        """
         text = text.lower()
         
         # Check for exact or partial matches
@@ -112,26 +115,51 @@ class RuleBasedDetector:
                 text_length = len(text)
                 match_ratio = match_length / text_length
                 
-                matched_items.append((category, keyword, match_ratio))
+                # Also check how well keyword matches (not just substring)
+                # Exact match or keyword is major part of text
+                is_exact_match = (keyword == text)
+                is_dominant = (match_ratio > 0.5)
+                
+                matched_items.append((category, keyword, match_ratio, is_exact_match, is_dominant))
         
         if not matched_items:
             return None
         
-        # Sort by match ratio (best match first)
-        matched_items.sort(key=lambda x: x[2], reverse=True)
+        # Sort by match quality (exact > dominant > ratio)
+        matched_items.sort(key=lambda x: (x[3], x[4], x[2]), reverse=True)
         
-        best_category, best_keyword, best_ratio = matched_items[0]
+        best_category, best_keyword, best_ratio, is_exact, is_dominant = matched_items[0]
         
-        # High confidence for good matches
-        if best_ratio > 0.3 or len(best_keyword) > 8:
-            confidence = min(0.98, 0.85 + best_ratio * 0.3)
+        # STRICTER RULES: Only return for well-known, common merchants
+        
+        # Strategy 1: Exact match (e.g., "netflix" == "netflix")
+        if is_exact:
+            confidence = 0.98
+            return best_category, confidence, f'Exact corpus match: "{best_keyword}"'
+        
+        # Strategy 2: Dominant match (keyword is >50% of text)
+        if is_dominant and len(best_keyword) >= 5:
+            confidence = min(0.95, 0.85 + best_ratio * 0.2)
+            return best_category, confidence, f'Strong corpus match: "{best_keyword}"'
+        
+        # Strategy 3: High quality partial match (long keyword, good ratio)
+        if best_ratio > 0.3 and len(best_keyword) > 8:
+            confidence = min(0.90, 0.80 + best_ratio * 0.15)
             return best_category, confidence, f'Corpus match: "{best_keyword}"'
         
-        # Medium confidence for partial matches
-        if best_ratio > 0.15:
-            confidence = 0.75
-            return best_category, confidence, f'Partial corpus match: "{best_keyword}"'
+        # Strategy 4: Common brand keywords (medium match)
+        # Only for well-known brands in corpus
+        common_brands = [
+            'netflix', 'amazon', 'flipkart', 'swiggy', 'zomato', 'uber', 'ola',
+            'spotify', 'hotstar', 'prime', 'paytm', 'phonepe', 'googlepay',
+            'starbucks', 'mcdonalds', 'kfc', 'dominos', 'indigo', 'air india'
+        ]
+        if best_keyword in common_brands and best_ratio > 0.2:
+            confidence = 0.85
+            return best_category, confidence, f'Common brand match: "{best_keyword}"'
         
+        # Don't return anything else - let other layers handle it
+        # This ensures Layer 0 only catches OBVIOUS, COMMON merchants
         return None
     
     def _is_salary(self, amount: float, date: datetime, history: pd.DataFrame) -> bool:

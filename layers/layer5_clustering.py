@@ -48,7 +48,24 @@ class BehavioralClusterer:
         features_clean = features_clean.apply(pd.to_numeric, errors='coerce').fillna(0)
         
         n_samples = len(features_clean)
-        min_cluster_size = max(5, int(0.01 * n_samples))
+        
+        # IMPROVED: Dynamic parameters based on dataset size
+        # Smaller min_cluster_size = More clusters (more granular)
+        # Larger min_cluster_size = Fewer clusters (more general)
+        if n_samples < 50:
+            min_cluster_size = 3
+            min_samples = 2
+        elif n_samples < 100:
+            min_cluster_size = 5
+            min_samples = 3
+        elif n_samples < 500:
+            min_cluster_size = max(3, int(0.03 * n_samples))  # 3% of data
+            min_samples = max(2, int(0.01 * n_samples))       # 1% of data
+        else:
+            min_cluster_size = max(5, int(0.02 * n_samples))  # 2% of data
+            min_samples = max(3, int(0.008 * n_samples))      # 0.8% of data
+        
+        print(f"Clustering with {n_samples} transactions: min_cluster_size={min_cluster_size}, min_samples={min_samples}")
         
         # Standardize features
         try:
@@ -65,12 +82,13 @@ class BehavioralClusterer:
         
         self.feature_vectors = features_scaled
         
-        # Fit HDBSCAN
+        # Fit HDBSCAN with improved parameters
         self.clusterer = hdbscan.HDBSCAN(
             min_cluster_size=min_cluster_size,
-            min_samples=5,
+            min_samples=min_samples,
             metric='euclidean',
-            cluster_selection_epsilon=0.3,
+            cluster_selection_epsilon=0.1,  # Reduced from 0.3 for more clusters
+            cluster_selection_method='eom',  # Excess of Mass (better for varied densities)
             prediction_data=True
         )
         
