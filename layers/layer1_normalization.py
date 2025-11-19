@@ -20,15 +20,8 @@ class TextNormalizer:
             'spotify': ['spotify', 'sptfy'],
             'amazon': ['amazon', 'amzn', 'amazonpay'],
             'flipkart': ['flipkart', 'flpkrt', 'fkrt'],
-            'bhart': ['bhartia', 'bhart'],
+            # 'bhart': ['bhartia', 'bhart'],
             'imagicaa': ['imagicaa', 'imagica'],
-            'vinayak': ['vinayak'],
-            'anushka': ['anushka', 'anushkashe'],
-            'shubham': ['shubham', 'shubhamraj'],
-            'venkates': ['venkates', 'venkatesha'],
-            'harshba': ['harshba', 'harshbala'],
-            'alphavi': ['alphavi', 'alpharane'],
-            'mayabha': ['mayabha', 'mayabhanu'],
             'indianr': ['indianr', 'indian railways'],
             'snowcre': ['snowcre', 'snowcreat'],
             'julfikar': ['julfikar', 'julfika'],
@@ -89,17 +82,23 @@ class TextNormalizer:
         tokens = [t for t in text.split() if len(t) > 2]
         text = ' '.join(tokens)
         
-        # Fuzzy match against canonical aliases - STRICTER
-        canonical, confidence = self._match_canonical(text)
+        # MINIMAL fuzzy matching - only ultra-obvious brands
+        # Most merchants should preserve their original text for semantic layer
+        canonical, confidence = self._match_canonical_minimal(text)
         
-        # Enhanced: Check recipient name directly - ONLY if very high confidence
-        if not canonical and recipient and len(recipient) > 5:
-            recipient_canonical, recipient_conf = self._match_canonical(recipient)
-            if recipient_canonical and recipient_conf > 0.95:  # Much stricter (was any confidence)
+        # Enhanced: Check recipient name directly (only if no match yet)
+        if not canonical and recipient:
+            recipient_canonical, recipient_conf = self._match_canonical_minimal(recipient)
+            if recipient_canonical and recipient_conf > confidence:
                 canonical = recipient_canonical
                 confidence = recipient_conf
         
-        # Note: Removed note field check - too many false positives
+        # Enhanced: Check note field (only if no match yet)
+        if not canonical and note_text:
+            note_canonical, note_conf = self._match_canonical_minimal(note_text)
+            if note_canonical and note_conf > confidence:
+                canonical = note_canonical
+                confidence = note_conf
         
         metadata = {
             'original_length': len(original_text),
@@ -115,7 +114,14 @@ class TextNormalizer:
             'has_note': bool(note_text)
         }
         
-        return text if not canonical else canonical, metadata
+        # CHANGE: Return original text even if canonical found (with lower confidence)
+        # This preserves merchant-specific details for semantic layer
+        if canonical and confidence >= 0.95:
+            # Only use canonical for ultra-high confidence (exact matches)
+            return canonical, metadata
+        else:
+            # Preserve original cleaned text for semantic analysis
+            return text, metadata
     
     def _extract_vpa(self, text: str) -> Optional[str]:
         """Extract UPI VPA (Virtual Payment Address)."""
@@ -138,5 +144,35 @@ class TextNormalizer:
         if best_score >= 90:
             return best_match, best_score / 100.0
         elif best_score >= 75:
+            return best_match, best_score / 100.0
+        return None, 0.0
+    
+    def _match_canonical_minimal(self, text: str) -> Tuple[Optional[str], float]:
+        """
+        MINIMAL canonical matching - only for top 5 brands.
+        Everything else should preserve original text for semantic layer.
+        """
+        # Only these 5 brands get normalized
+        minimal_aliases = {
+            'netflix': ['netflix', 'netflixupi', 'ntflx'],
+            'swiggy': ['swiggy', 'swigy'],
+            'zomato': ['zomato', 'zmato'],
+            'uber': ['uber', 'ubr'],
+            'ola': ['ola', 'olacabs']
+        }
+        
+        best_match = None
+        best_score = 0
+        
+        for canonical, aliases in minimal_aliases.items():
+            for alias in aliases:
+                # Require 95+ score for normalization
+                score = fuzz.partial_ratio(text, alias)
+                if score > best_score:
+                    best_score = score
+                    best_match = canonical
+        
+        # Only return if VERY high confidence
+        if best_score >= 95:
             return best_match, best_score / 100.0
         return None, 0.0

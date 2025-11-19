@@ -37,15 +37,22 @@ class RuleBasedDetector:
         self.keyword_to_category = {}
         self._build_keyword_map()
         
-        # ULTRA-RESTRICTED SUBSCRIPTION LIST - Only top 10 services
-        # Everything else goes to semantic/clustering layers
+        # KNOWN SUBSCRIPTION SERVICES (definitive list)
         self.known_subscriptions = {
-            # Only the most obvious streaming services (top 5)
-            'netflix', 'netflixupi', 'amazon prime', 'hotstar', 'spotify',
-            # Only top 3 software/cloud
-            'youtube premium', 'microsoft 365', 'adobe',
-            # Top 2 fitness
-            'cult.fit', 'cultfit'
+            # Streaming services
+            'netflix', 'netflixupi', 'prime', 'amazon prime', 'hotstar', 'disney',
+            'zee5', 'sonyliv', 'voot', 'altbalaji', 'mx player', 'jio cinema',
+            'apple tv', 'youtube premium', 'spotify', 'gaana', 'jio saavn',
+            'amazon music', 'youtube music','airtel',
+            # Cloud & software
+            'google one', 'icloud', 'microsoft 365', 'office 365', 'dropbox',
+            'adobe', 'canva', 'grammarly',
+            # News & magazines
+            'times', 'hindu', 'mint', 'economic times', 'kindle unlimited',
+            # Fitness
+            'cult.fit', 'cultfit', 'healthifyme', 'fitbit', 'strava',
+            # Other subscriptions
+            'linkedin premium', 'medium', 'quora'
         }
     
     def _build_keyword_map(self):
@@ -85,29 +92,33 @@ class RuleBasedDetector:
             category, confidence, reason = corpus_match
             return category, confidence, reason
         
-        # Priority 2: Salary Detection (very specific rules)
-        if txn_type == 'credit':
-            salary_match = self._is_salary(amount, date, user_history)
-            if salary_match:
-                return 'Salary/Income', 1.0, 'Rule: Credit, monthly, high amount, month start'
+        # Priority 2: Salary Detection (ONLY if super obvious)
+        # Disabled for now - let semantic layer learn salary patterns
+        # if txn_type == 'credit':
+        #     salary_match = self._is_salary(amount, date, user_history)
+        #     if salary_match:
+        #         return 'Salary/Income', 1.0, 'Rule: Credit, monthly, high amount, month start'
         
-        # Priority 3: Investment Detection (SIP patterns)
-        if txn_type == 'debit':
-            sip_match = self._is_sip(amount, combined_text, user_history)
-            if sip_match:
-                return 'Investments', 1.0, 'Rule: Debit, monthly, SIP keywords, recurring'
+        # Priority 3: Investment Detection (ONLY explicit SIP keywords)
+        if txn_type == 'debit' and amount >= 500:
+            # Only if EXPLICIT investment keywords present
+            explicit_investment_keywords = ['sip', 'mutual fund', 'zerodha', 'groww', 'upstox', 'systematic']
+            if any(kw in combined_text for kw in explicit_investment_keywords):
+                return 'Investments', 0.95, 'Rule: Explicit SIP/investment keywords'
         
-        # Priority 4: STRICT Subscription Detection
-        subscription_match = self._is_subscription_strict(
-            combined_text, recipient_name, upi_id, note, amount, date, user_history
-        )
-        if subscription_match:
-            return 'Subscriptions', 1.0, 'Rule: Confirmed subscription service'
+        # Priority 4: Subscription Detection - DISABLED
+        # Let semantic layer learn subscription patterns from context
+        # subscription_match = self._is_subscription_strict(
+        #     combined_text, recipient_name, upi_id, note, amount, date, user_history
+        # )
+        # if subscription_match:
+        #     return 'Subscriptions', 1.0, 'Rule: Confirmed subscription service'
         
-        # Priority 5: Transfer Detection
-        transfer_match = self._is_transfer(combined_text, recipient_name, amount, txn_type)
-        if transfer_match:
-            return 'Transfers', 0.95, 'Rule: Transfer keywords or person name detected'
+        # Priority 5: Transfer Detection (ONLY explicit keywords)
+        # Person-to-person transfers with explicit keywords
+        explicit_transfer_keywords = ['neft', 'rtgs', 'imps', 'self transfer', 'own account']
+        if any(kw in combined_text for kw in explicit_transfer_keywords):
+            return 'Transfers', 0.90, 'Rule: Explicit transfer keywords'
         
         # No rule matched
         return None, 0.0, 'No rule matched'
@@ -115,63 +126,50 @@ class RuleBasedDetector:
     def _match_corpus(self, text: str) -> Optional[Tuple[str, float, str]]:
         """
         Match against Mumbai merchant corpus.
-        IMPROVED: More selective - only return for HIGH CONFIDENCE matches.
+        ULTRA-MINIMAL: Only catch the TOP 5-10 most obvious brands.
+        Let semantic layers (L3/L5) handle everything else.
+        
+        Goal: L0 should handle < 5% of transactions (not 30%+)
         """
         text = text.lower()
         
-        # Check for exact or partial matches
-        matched_items = []
-        for keyword, category in self.keyword_to_category.items():
-            if keyword in text:
-                # Calculate match quality
-                match_length = len(keyword)
-                text_length = len(text)
-                match_ratio = match_length / text_length
-                
-                # Also check how well keyword matches (not just substring)
-                # Exact match or keyword is major part of text
-                is_exact_match = (keyword == text)
-                is_dominant = (match_ratio > 0.5)
-                
-                matched_items.append((category, keyword, match_ratio, is_exact_match, is_dominant))
+        # ULTRA-RESTRICTED: Only these exact brands get L0 classification
+        # Everything else goes to semantic/clustering layers
+        ultra_obvious_brands = {
+            'netflix': 'Subscriptions',
+            'netflixupi': 'Subscriptions',
+            'spotify': 'Subscriptions',
+            'amazon prime': 'Subscriptions',
+            'hotstar': 'Subscriptions',
+            'swiggy': 'Food & Dining',
+            'zomato': 'Food & Dining',
+            'uber': 'Commute/Transport',
+            'ola': 'Commute/Transport',
+            'olacabs': 'Commute/Transport'
+        }
         
-        if not matched_items:
-            return None
+        # Check for EXACT matches only
+        text_clean = text.strip()
         
-        # Sort by match quality (exact > dominant > ratio)
-        matched_items.sort(key=lambda x: (x[3], x[4], x[2]), reverse=True)
+        # Strategy 1: Exact match (highest confidence)
+        if text_clean in ultra_obvious_brands:
+            return ultra_obvious_brands[text_clean], 0.99, f'Exact L0 match: "{text_clean}"'
         
-        best_category, best_keyword, best_ratio, is_exact, is_dominant = matched_items[0]
+        # Strategy 2: Dominant substring (>70% of text, min 6 chars)
+        for brand, category in ultra_obvious_brands.items():
+            if brand in text_clean and len(brand) >= 6:
+                match_ratio = len(brand) / len(text_clean)
+                if match_ratio > 0.7:  # Brand is >70% of text
+                    return category, 0.90, f'Dominant L0 match: "{brand}"'
         
-        # STRICTER RULES: Only return for well-known, common merchants
-        
-        # Strategy 1: Exact match (e.g., "netflix" == "netflix")
-        if is_exact:
-            confidence = 0.98
-            return best_category, confidence, f'Exact corpus match: "{best_keyword}"'
-        
-        # Strategy 2: Dominant match (keyword is >50% of text)
-        if is_dominant and len(best_keyword) >= 5:
-            confidence = min(0.95, 0.85 + best_ratio * 0.2)
-            return best_category, confidence, f'Strong corpus match: "{best_keyword}"'
-        
-        # Strategy 3: High quality partial match (long keyword, good ratio)
-        if best_ratio > 0.3 and len(best_keyword) > 8:
-            confidence = min(0.90, 0.80 + best_ratio * 0.15)
-            return best_category, confidence, f'Corpus match: "{best_keyword}"'
-        
-        # Strategy 4: ONLY top national brands (very restrictive)
-        # Reduced to ONLY the most common services everyone uses
-        top_national_brands = [
-            'netflix', 'amazon', 'flipkart', 'swiggy', 'zomato', 
-            'spotify', 'hotstar', 'prime', 'uber', 'ola'
-        ]
-        if best_keyword in top_national_brands and best_ratio > 0.3:  # Increased from 0.2 to 0.3
-            confidence = 0.85
-            return best_category, confidence, f'Top brand match: "{best_keyword}"'
-        
-        # EVERYTHING ELSE goes to Layer 3/5
-        # Layer 0 should only catch 10-15% (not 30%)
+        # EVERYTHING ELSE → Pass to L3/L5 for semantic analysis
+        # This includes:
+        # - All local merchants (Julfikar, Bikaner, etc.)
+        # - All shops/stores
+        # - All bills & utilities
+        # - All entertainment venues
+        # - All other subscriptions
+        # Let the semantic layer learn these patterns!
         return None
     
     def _is_salary(self, amount: float, date: datetime, history: pd.DataFrame) -> bool:
@@ -222,15 +220,14 @@ class RuleBasedDetector:
                 is_known_service = True
                 break
         
-        # If NOT a top-10 service, require MULTIPLE explicit keywords
+        # If NOT a known service, apply STRICT checks
         if not is_known_service:
-            # Check for MULTIPLE explicit subscription keywords
-            explicit_keywords = ['subscription', 'membership', 'premium plan', 'renewal', 'recurring payment']
-            keyword_count = sum(1 for kw in explicit_keywords if kw in combined_text or kw in note)
+            # Check for explicit subscription keywords
+            explicit_keywords = ['subscription', 'membership', 'premium', 'renewal']
+            has_explicit_keyword = any(kw in combined_text or kw in note for kw in explicit_keywords)
             
-            if keyword_count < 2:  # Need at least 2 explicit keywords
-                # NOT a top service AND not enough keywords → NOT a subscription
-                # Let semantic/clustering layers handle it
+            if not has_explicit_keyword:
+                # NOT a known service AND no explicit keywords → NOT a subscription
                 return False
         
         # Criterion 2: Subscription amount pattern (₹50 - ₹3000 typical range)

@@ -275,41 +275,36 @@ with tab1:
                             note=note
                         )
                         
-                        # DISABLED: Layer 1 canonical match - too aggressive
-                        # Let Layer 3 (semantic) handle most merchant matching
-                        # Only keep this for VERY high confidence (>0.98)
-                        if norm_metadata.get('canonical_match') and norm_metadata.get('canonical_confidence', 0) > 0.98:
+                        # Check if canonical match exists
+                        if norm_metadata.get('canonical_match') and norm_metadata.get('canonical_confidence', 0) > 0.9:
                             canonical = norm_metadata['canonical_match']
-                            # Only for top brands (netflix, amazon, etc.)
-                            top_brands = ['netflix', 'amazon', 'swiggy', 'zomato', 'uber', 'ola', 'spotify']
-                            if canonical in top_brands:
-                                category = normalizer.category_map.get(canonical, 'Others/Uncategorized')
-                                
-                                result = {
-                                    'transaction_id': idx,
-                                    'original_description': text,
-                                    'normalized_text': normalized_text,
-                                    'recipient_name': recipient_name if recipient_name and not pd.isna(recipient_name) else '',
-                                    'upi_id': upi_id if upi_id and not pd.isna(upi_id) else '',
-                                    'note': note if note and not pd.isna(note) else '',
-                                    'amount': row['amount'],
-                                    'category': category,
-                                    'confidence': norm_metadata['canonical_confidence'],
-                                    'layer_used': 'L1: Canonical Match',
-                                    'reason': f"Exact match to top brand: {canonical}",
-                                    'should_prompt': False,
-                                    'alpha': None
-                                }
-                                results.append(result)
-                                st.session_state.metrics_tracker.log_prediction(
-                                    category, 
-                                    norm_metadata['canonical_confidence'],
-                                    'L1: Canonical Match',
-                                    alpha=None,
-                                    merchant=canonical,
-                                    true_category=row.get('true_category', None)
-                                )
-                                continue
+                            category = normalizer.category_map.get(canonical, 'Others/Uncategorized')
+                            
+                            result = {
+                                'transaction_id': idx,
+                                'original_description': text,
+                                'normalized_text': normalized_text,
+                                'recipient_name': recipient_name if recipient_name and not pd.isna(recipient_name) else '',
+                                'upi_id': upi_id if upi_id and not pd.isna(upi_id) else '',
+                                'note': note if note and not pd.isna(note) else '',
+                                'amount': row['amount'],
+                                'category': category,
+                                'confidence': norm_metadata['canonical_confidence'],
+                                'layer_used': 'L1: Canonical Match',
+                                'reason': f"Matched to known merchant: {canonical}",
+                                'should_prompt': False,
+                                'alpha': None
+                            }
+                            results.append(result)
+                            st.session_state.metrics_tracker.log_prediction(
+                                category, 
+                                norm_metadata['canonical_confidence'],
+                                'L1: Canonical Match',
+                                alpha=None,
+                                merchant=canonical,
+                                true_category=row.get('true_category', None)
+                            )
+                            continue
                         
                         # Layer 2 & 3: Embeddings + Semantic Search (Enhanced)
                         embedding = embedder.embed(
