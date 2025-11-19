@@ -118,13 +118,54 @@ with tab1:
         if 'date' in df.columns:
             df['date'] = pd.to_datetime(df['date'], format='%d-%m-%Y %H:%M', errors='coerce')
         
+        # Create description from available fields if not present
+        if 'description' not in df.columns or df['description'].isna().all():
+            # Build description from Recipient_Name, UPI_ID, and Note
+            description_parts = []
+            
+            if 'recipient_name' in df.columns:
+                description_parts.append(df['recipient_name'].fillna(''))
+            if 'upi_id' in df.columns:
+                description_parts.append(df['upi_id'].fillna(''))
+            if 'note' in df.columns:
+                description_parts.append(df['note'].fillna(''))
+            
+            # Combine parts, filtering out empty strings
+            df['description'] = description_parts[0] if description_parts else 'UPI Transaction'
+            for part in description_parts[1:]:
+                df['description'] = df['description'] + ' ' + part
+            
+            # Clean up extra spaces
+            df['description'] = df['description'].str.strip().str.replace(r'\s+', ' ', regex=True)
+            
+            st.info("ℹ️ No 'description' column found. Created from Recipient_Name, UPI_ID, and Note fields.")
+        
+        # Create merchant column from recipient_name if not present
+        if 'merchant' not in df.columns:
+            if 'recipient_name' in df.columns:
+                df['merchant'] = df['recipient_name']
+            else:
+                df['merchant'] = df['description']
+        
         st.session_state.transactions = df
         
         st.success(f"✅ Loaded {len(df)} transactions")
+        
+        # Show column info
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info(f"📊 Columns found: {', '.join(df.columns.tolist())}")
+        with col2:
+            has_upi = 'recipient_name' in df.columns and 'upi_id' in df.columns
+            if has_upi:
+                st.success("✅ UPI fields detected (Recipient_Name, UPI_ID, Note)")
+            else:
+                st.warning("⚠️ UPI fields not found - accuracy may be lower")
+        
         st.dataframe(df.head(10), use_container_width=True)
         
         # Required columns check
-        required_cols = ['date', 'amount', 'description', 'type']
+        required_cols = ['date', 'amount', 'type']  # Removed 'description' as we create it
         missing = [col for col in required_cols if col not in df.columns]
         
         if missing:
