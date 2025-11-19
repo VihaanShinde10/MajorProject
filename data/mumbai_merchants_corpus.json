@@ -6,7 +6,8 @@
       "mahesh lunch home", "trishna", "theobroma", "britannia", "bademiya", "bagdadi",
       "sarvi", "aaswad", "shree thaker bhojanalay", "gulshan", "kyani", "kayani",
       "swati snacks", "candies", "smoke house deli", "pizza express", "social",
-      "toit", "the pantry", "indigo deli", "leopold cafe", "mondegar", "bade miya"
+      "toit", "the pantry", "indigo deli", "leopold cafe", "mondegar", "bade miya",
+      "julfikar", "bikaner", "bikanervala", "snowcre", "snowcreat"
     ],
     "food_delivery": [
       "swiggy", "zomato", "uber eats", "ubereats", "dunzo", "freshmenu", "faasos",
@@ -16,7 +17,10 @@
       "starbucks", "coffee day", "barista", "blue tokai", "third wave coffee",
       "kala ghoda cafe", "prithvi cafe"
     ],
-    "keywords": ["restaurant", "cafe", "hotel", "dine", "lunch", "dinner", "breakfast"]
+    "bakeries": [
+      "julfikar", "julfikar bakery", "baker", "bakery"
+    ],
+    "keywords": ["restaurant", "cafe", "hotel", "dine", "lunch", "dinner", "breakfast", "baker", "bakery"]
   },
   
   "Commute/Transport": {
@@ -26,7 +30,8 @@
     ],
     "transport": [
       "uber", "ola", "rapido", "meru", "fastrack", "best", "mumbai metro",
-      "western railway", "central railway", "harbour line", "fastag", "paytm fastag"
+      "western railway", "central railway", "harbour line", "fastag", "paytm fastag",
+      "indian railways", "indianr", "irctc", "rail ticket"
     ],
     "parking": [
       "mumbai parking", "bmc parking", "parking fees", "paid parking"
@@ -91,7 +96,10 @@
       "steam", "playstation", "xbox", "nintendo", "google play", "app store",
       "epic games", "riot games"
     ],
-    "keywords": ["movie", "cinema", "theater", "show", "concert", "event", "game"]
+    "attractions": [
+      "imagicaa", "imagica", "essel world", "water kingdom", "wonderla"
+    ],
+    "keywords": ["movie", "cinema", "theater", "show", "concert", "event", "game", "amusement", "park"]
   },
   
   "Healthcare": {
@@ -169,7 +177,11 @@
       "paytm", "phonepe", "google pay", "gpay", "amazon pay", "mobikwik",
       "freecharge", "bhim", "whatsapp pay"
     ],
-    "keywords": ["transfer", "neft", "rtgs", "imps", "upi", "wallet", "self transfer", "fund transfer"]
+    "people_names": [
+      "vinayak", "anushka", "shubham", "venkates", "aashay", "harshba", 
+      "alphavi", "mayabha", "bhartia", "imagicaa"
+    ],
+    "keywords": ["transfer", "neft", "rtgs", "imps", "upi", "wallet", "self transfer", "fund transfer", "sent", "payme", "payment"]
   },
   
   "Salary/Income": {

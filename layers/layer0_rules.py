@@ -60,7 +60,13 @@ class RuleBasedDetector:
         txn_type = str(txn.get('type', '')).lower()
         date = pd.to_datetime(txn['date'])
         
-        combined_text = f"{description} {merchant}"
+        # Enhanced: Include UPI fields for better matching
+        recipient_name = str(txn.get('Recipient_Name', txn.get('recipient_name', ''))).lower()
+        upi_id = str(txn.get('UPI_ID', txn.get('upi_id', ''))).lower()
+        note = str(txn.get('Note', txn.get('note', ''))).lower()
+        
+        # Combine all text sources
+        combined_text = f"{description} {merchant} {recipient_name} {upi_id} {note}"
         
         # Priority 1: Check merchant corpus (most reliable)
         corpus_match = self._match_corpus(combined_text)

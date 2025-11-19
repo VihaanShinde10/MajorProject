@@ -96,7 +96,11 @@ with tab1:
             'Debit': 'debit',
             'Credit': 'credit',
             'Transaction_Mode': 'mode',
-            'DR/CR_Indicator': 'type'
+            'DR/CR_Indicator': 'type',
+            'Recipient_Name': 'recipient_name',
+            'UPI_ID': 'upi_id',
+            'Note': 'note',
+            'Balance': 'balance'
         }
         
         # Rename columns if they exist
@@ -217,9 +221,18 @@ with tab1:
                         # Layer 0: Rules (highest priority - corpus-based)
                         rule_result = rule_detector.detect(row, history)
                         
-                        # Layer 1: Normalization
+                        # Layer 1: Normalization (Enhanced with UPI fields)
                         text = str(row.get('description', ''))
-                        normalized_text, norm_metadata = normalizer.normalize(text)
+                        recipient_name = row.get('recipient_name', None)
+                        upi_id = row.get('upi_id', None)
+                        note = row.get('note', None)
+                        
+                        normalized_text, norm_metadata = normalizer.normalize(
+                            text, 
+                            recipient_name=recipient_name,
+                            upi_id=upi_id,
+                            note=note
+                        )
                         
                         # Check if canonical match exists
                         if norm_metadata.get('canonical_match') and norm_metadata.get('canonical_confidence', 0) > 0.9:
@@ -230,11 +243,16 @@ with tab1:
                                 'transaction_id': idx,
                                 'original_description': text,
                                 'normalized_text': normalized_text,
+                                'recipient_name': recipient_name if recipient_name and not pd.isna(recipient_name) else '',
+                                'upi_id': upi_id if upi_id and not pd.isna(upi_id) else '',
+                                'note': note if note and not pd.isna(note) else '',
+                                'amount': row['amount'],
                                 'category': category,
                                 'confidence': norm_metadata['canonical_confidence'],
                                 'layer_used': 'L1: Canonical Match',
                                 'reason': f"Matched to known merchant: {canonical}",
-                                'should_prompt': False
+                                'should_prompt': False,
+                                'alpha': None
                             }
                             results.append(result)
                             st.session_state.metrics_tracker.log_prediction(
@@ -247,8 +265,15 @@ with tab1:
                             )
                             continue
                         
-                        # Layer 2 & 3: Embeddings + Semantic Search
-                        embedding = embedder.embed(normalized_text, row.get('type', ''))
+                        # Layer 2 & 3: Embeddings + Semantic Search (Enhanced)
+                        embedding = embedder.embed(
+                            normalized_text, 
+                            transaction_mode=row.get('type', ''),
+                            recipient_name=recipient_name,
+                            upi_id=upi_id,
+                            note=note,
+                            amount=row['amount']
+                        )
                         
                         semantic_result = (None, 0.0, {})
                         if st.session_state.semantic_searcher and st.session_state.semantic_searcher.index:
@@ -309,6 +334,10 @@ with tab1:
                             'transaction_id': idx,
                             'original_description': text,
                             'normalized_text': normalized_text,
+                            'recipient_name': recipient_name if recipient_name and not pd.isna(recipient_name) else '',
+                            'upi_id': upi_id if upi_id and not pd.isna(upi_id) else '',
+                            'note': note if note and not pd.isna(note) else '',
+                            'amount': row['amount'],
                             'category': classification.category,
                             'confidence': classification.confidence,
                             'layer_used': classification.layer_used,
@@ -423,9 +452,22 @@ with tab2:
             filtered_df = filtered_df[filtered_df['category'].isin(selected_category)]
         filtered_df = filtered_df[filtered_df['confidence'] >= min_conf]
         
+        # Display with new UPI fields
+        display_columns = ['transaction_id', 'original_description', 'recipient_name', 'upi_id', 
+                          'note', 'amount', 'category', 'confidence', 'layer_used', 'reason']
+        # Only show columns that exist
+        available_cols = [col for col in display_columns if col in filtered_df.columns]
+        
         st.dataframe(
-            filtered_df[['transaction_id', 'original_description', 'category', 'confidence', 'layer_used', 'reason']],
-            use_container_width=True
+            filtered_df[available_cols],
+            use_container_width=True,
+            column_config={
+                'recipient_name': st.column_config.TextColumn('Recipient', width='medium'),
+                'upi_id': st.column_config.TextColumn('UPI ID', width='medium'),
+                'note': st.column_config.TextColumn('Note', width='small'),
+                'amount': st.column_config.NumberColumn('Amount', format='₹%.2f'),
+                'confidence': st.column_config.ProgressColumn('Confidence', format='%.2f', min_value=0, max_value=1)
+            }
         )
         
         # Download results
