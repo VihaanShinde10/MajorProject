@@ -37,22 +37,15 @@ class RuleBasedDetector:
         self.keyword_to_category = {}
         self._build_keyword_map()
         
-        # KNOWN SUBSCRIPTION SERVICES (definitive list)
+        # ULTRA-RESTRICTED SUBSCRIPTION LIST - Only top 10 services
+        # Everything else goes to semantic/clustering layers
         self.known_subscriptions = {
-            # Streaming services
-            'netflix', 'netflixupi', 'prime', 'amazon prime', 'hotstar', 'disney',
-            'zee5', 'sonyliv', 'voot', 'altbalaji', 'mx player', 'jio cinema',
-            'apple tv', 'youtube premium', 'spotify', 'gaana', 'jio saavn',
-            'amazon music', 'youtube music',
-            # Cloud & software
-            'google one', 'icloud', 'microsoft 365', 'office 365', 'dropbox',
-            'adobe', 'canva', 'grammarly',
-            # News & magazines
-            'times', 'hindu', 'mint', 'economic times', 'kindle unlimited',
-            # Fitness
-            'cult.fit', 'cultfit', 'healthifyme', 'fitbit', 'strava',
-            # Other subscriptions
-            'linkedin premium', 'medium', 'quora'
+            # Only the most obvious streaming services (top 5)
+            'netflix', 'netflixupi', 'amazon prime', 'hotstar', 'spotify',
+            # Only top 3 software/cloud
+            'youtube premium', 'microsoft 365', 'adobe',
+            # Top 2 fitness
+            'cult.fit', 'cultfit'
         }
     
     def _build_keyword_map(self):
@@ -167,19 +160,18 @@ class RuleBasedDetector:
             confidence = min(0.90, 0.80 + best_ratio * 0.15)
             return best_category, confidence, f'Corpus match: "{best_keyword}"'
         
-        # Strategy 4: Common brand keywords (medium match)
-        # Only for well-known brands in corpus
-        common_brands = [
-            'netflix', 'amazon', 'flipkart', 'swiggy', 'zomato', 'uber', 'ola',
-            'spotify', 'hotstar', 'prime', 'paytm', 'phonepe', 'googlepay',
-            'starbucks', 'mcdonalds', 'kfc', 'dominos', 'indigo', 'air india'
+        # Strategy 4: ONLY top national brands (very restrictive)
+        # Reduced to ONLY the most common services everyone uses
+        top_national_brands = [
+            'netflix', 'amazon', 'flipkart', 'swiggy', 'zomato', 
+            'spotify', 'hotstar', 'prime', 'uber', 'ola'
         ]
-        if best_keyword in common_brands and best_ratio > 0.2:
+        if best_keyword in top_national_brands and best_ratio > 0.3:  # Increased from 0.2 to 0.3
             confidence = 0.85
-            return best_category, confidence, f'Common brand match: "{best_keyword}"'
+            return best_category, confidence, f'Top brand match: "{best_keyword}"'
         
-        # Don't return anything else - let other layers handle it
-        # This ensures Layer 0 only catches OBVIOUS, COMMON merchants
+        # EVERYTHING ELSE goes to Layer 3/5
+        # Layer 0 should only catch 10-15% (not 30%)
         return None
     
     def _is_salary(self, amount: float, date: datetime, history: pd.DataFrame) -> bool:
@@ -230,14 +222,15 @@ class RuleBasedDetector:
                 is_known_service = True
                 break
         
-        # If NOT a known service, apply STRICT checks
+        # If NOT a top-10 service, require MULTIPLE explicit keywords
         if not is_known_service:
-            # Check for explicit subscription keywords
-            explicit_keywords = ['subscription', 'membership', 'premium', 'renewal']
-            has_explicit_keyword = any(kw in combined_text or kw in note for kw in explicit_keywords)
+            # Check for MULTIPLE explicit subscription keywords
+            explicit_keywords = ['subscription', 'membership', 'premium plan', 'renewal', 'recurring payment']
+            keyword_count = sum(1 for kw in explicit_keywords if kw in combined_text or kw in note)
             
-            if not has_explicit_keyword:
-                # NOT a known service AND no explicit keywords → NOT a subscription
+            if keyword_count < 2:  # Need at least 2 explicit keywords
+                # NOT a top service AND not enough keywords → NOT a subscription
+                # Let semantic/clustering layers handle it
                 return False
         
         # Criterion 2: Subscription amount pattern (₹50 - ₹3000 typical range)

@@ -89,22 +89,17 @@ class TextNormalizer:
         tokens = [t for t in text.split() if len(t) > 2]
         text = ' '.join(tokens)
         
-        # Fuzzy match against canonical aliases
+        # Fuzzy match against canonical aliases - STRICTER
         canonical, confidence = self._match_canonical(text)
         
-        # Enhanced: Check recipient name directly
-        if not canonical and recipient:
+        # Enhanced: Check recipient name directly - ONLY if very high confidence
+        if not canonical and recipient and len(recipient) > 5:
             recipient_canonical, recipient_conf = self._match_canonical(recipient)
-            if recipient_canonical and recipient_conf > confidence:
+            if recipient_canonical and recipient_conf > 0.95:  # Much stricter (was any confidence)
                 canonical = recipient_canonical
                 confidence = recipient_conf
         
-        # Enhanced: Check note field
-        if not canonical and note_text:
-            note_canonical, note_conf = self._match_canonical(note_text)
-            if note_canonical and note_conf > confidence:
-                canonical = note_canonical
-                confidence = note_conf
+        # Note: Removed note field check - too many false positives
         
         metadata = {
             'original_length': len(original_text),
