@@ -156,19 +156,67 @@ class TextNormalizer:
         return match.group(0) if match else None
     
     def _match_canonical(self, text: str) -> Tuple[Optional[str], float]:
-        """Match text against canonical merchant names."""
+        """
+        Match text against canonical merchant names.
+        FIXED: Much stricter matching to prevent false positives like "burgerking" → subscription.
+        
+        Strategy:
+        1. Exact match (100% confidence)
+        2. Exact substring match with word boundaries (98% confidence)
+        3. Fuzzy match with STRICT 95%+ threshold using ratio (not partial_ratio)
+        """
         best_match = None
         best_score = 0
+        best_method = None
+        
+        text_lower = text.lower().strip()
         
         for canonical, aliases in self.canonical_aliases.items():
             for alias in aliases:
-                score = fuzz.partial_ratio(text, alias)
-                if score > best_score:
-                    best_score = score
-                    best_match = canonical
+                alias_lower = alias.lower().strip()
+                
+                # Strategy 1: Exact match (highest confidence)
+                if text_lower == alias_lower:
+                    if 100 > best_score:
+                        best_score = 100
+                        best_match = canonical
+                        best_method = 'exact'
+                    continue
+                
+                # Strategy 2: Exact substring with word boundaries
+                # Ensures "burger" doesn't match "burgerking"
+                if alias_lower in text_lower:
+                    # Check if it's a complete word (not part of another word)
+                    alias_start = text_lower.find(alias_lower)
+                    alias_end = alias_start + len(alias_lower)
+                    
+                    # Check boundaries
+                    is_word_start = alias_start == 0 or not text_lower[alias_start-1].isalnum()
+                    is_word_end = alias_end == len(text_lower) or not text_lower[alias_end].isalnum()
+                    
+                    if is_word_start and is_word_end:
+                        # Calculate match quality based on how much of text is the alias
+                        match_ratio = len(alias_lower) / len(text_lower)
+                        score = min(98, 90 + match_ratio * 8)  # 90-98 range
+                        
+                        if score > best_score:
+                            best_score = score
+                            best_match = canonical
+                            best_method = 'substring'
+                        continue
+                
+                # Strategy 3: Fuzzy match with STRICT 95%+ threshold
+                # Use ratio (not partial_ratio) for precision
+                fuzzy_score = fuzz.ratio(text_lower, alias_lower)
+                
+                if fuzzy_score >= 95:  # VERY strict threshold
+                    if fuzzy_score > best_score:
+                        best_score = fuzzy_score
+                        best_match = canonical
+                        best_method = 'fuzzy'
         
-        if best_score >= 90:
+        # Only return if we have a confident match
+        if best_score >= 95:
             return best_match, best_score / 100.0
-        elif best_score >= 75:
-            return best_match, best_score / 100.0
+        
         return None, 0.0

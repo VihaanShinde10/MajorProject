@@ -147,64 +147,78 @@ class RuleBasedDetector:
     def _match_corpus(self, text: str) -> Optional[Tuple[str, float, str]]:
         """
         Match against Mumbai merchant corpus.
-        IMPROVED: More selective - only return for HIGH CONFIDENCE matches.
+        ULTRA-PRECISE: Word-boundary checking to prevent false matches like "burger" in "burgerking".
         """
-        text = text.lower()
+        text = text.lower().strip()
         
-        # Check for exact or partial matches
+        # Check for exact or word-boundary substring matches
         matched_items = []
         for keyword, category in self.keyword_to_category.items():
+            # Strategy 1: Exact match (highest priority)
+            if keyword == text:
+                matched_items.append((category, keyword, 1.0, True, True, True))
+                continue
+            
+            # Strategy 2: Substring with word boundaries
             if keyword in text:
-                # Calculate match quality
-                match_length = len(keyword)
-                text_length = len(text)
-                match_ratio = match_length / text_length
+                # Find the keyword position
+                keyword_start = text.find(keyword)
+                keyword_end = keyword_start + len(keyword)
                 
-                # Also check how well keyword matches (not just substring)
-                # Exact match or keyword is major part of text
-                is_exact_match = (keyword == text)
-                is_dominant = (match_ratio > 0.5)
+                # Check if it's at word boundaries (not part of another word)
+                is_word_start = keyword_start == 0 or not text[keyword_start-1].isalnum()
+                is_word_end = keyword_end == len(text) or not text[keyword_end].isalnum()
                 
-                matched_items.append((category, keyword, match_ratio, is_exact_match, is_dominant))
+                # Only consider it a match if it's a complete word
+                if is_word_start and is_word_end:
+                    match_length = len(keyword)
+                    text_length = len(text)
+                    match_ratio = match_length / text_length
+                    
+                    is_exact_match = (keyword == text)
+                    is_dominant = (match_ratio > 0.5)
+                    
+                    matched_items.append((category, keyword, match_ratio, is_exact_match, is_dominant, True))
         
         if not matched_items:
             return None
         
-        # Sort by match quality (exact > dominant > ratio)
-        matched_items.sort(key=lambda x: (x[3], x[4], x[2]), reverse=True)
+        # Sort by match quality (exact > word_boundary > dominant > ratio)
+        matched_items.sort(key=lambda x: (x[3], x[5], x[4], x[2]), reverse=True)
         
-        best_category, best_keyword, best_ratio, is_exact, is_dominant = matched_items[0]
+        best_category, best_keyword, best_ratio, is_exact, is_dominant, is_word_boundary = matched_items[0]
         
-        # STRICTER RULES: Only return for well-known, common merchants
+        # ULTRA-STRICT RULES: Only return for high-confidence matches
         
-        # Strategy 1: Exact match (e.g., "netflix" == "netflix")
+        # Rule 1: Exact match (e.g., "netflix" == "netflix")
         if is_exact:
             confidence = 0.98
             return best_category, confidence, f'Exact corpus match: "{best_keyword}"'
         
-        # Strategy 2: Dominant match (keyword is >50% of text)
-        if is_dominant and len(best_keyword) >= 5:
+        # Rule 2: Dominant word-boundary match (keyword is >50% of text)
+        if is_word_boundary and is_dominant and len(best_keyword) >= 5:
             confidence = min(0.95, 0.85 + best_ratio * 0.2)
             return best_category, confidence, f'Strong corpus match: "{best_keyword}"'
         
-        # Strategy 3: High quality partial match (long keyword, good ratio)
-        if best_ratio > 0.3 and len(best_keyword) > 8:
-            confidence = min(0.90, 0.80 + best_ratio * 0.15)
+        # Rule 3: High quality word-boundary match (long keyword, good ratio)
+        if is_word_boundary and best_ratio > 0.4 and len(best_keyword) > 8:
+            confidence = min(0.92, 0.82 + best_ratio * 0.15)
             return best_category, confidence, f'Corpus match: "{best_keyword}"'
         
-        # Strategy 4: Common brand keywords (medium match)
-        # Only for well-known brands in corpus
-        common_brands = [
+        # Rule 4: Top national brands (very restrictive) - only if word-boundary match
+        # These are brands everyone knows, so we can be more lenient with ratio
+        top_national_brands = [
             'netflix', 'amazon', 'flipkart', 'swiggy', 'zomato', 'uber', 'ola',
             'spotify', 'hotstar', 'prime', 'paytm', 'phonepe', 'googlepay',
-            'starbucks', 'mcdonalds', 'kfc', 'dominos', 'indigo', 'air india'
+            'starbucks', 'mcdonalds', 'kfc', 'dominos', 'burgerking', 'burger king',
+            'indigo', 'air india', 'spicejet'
         ]
-        if best_keyword in common_brands and best_ratio > 0.2:
-            confidence = 0.85
-            return best_category, confidence, f'Common brand match: "{best_keyword}"'
+        if is_word_boundary and best_keyword in top_national_brands and best_ratio > 0.3:
+            confidence = 0.88
+            return best_category, confidence, f'Top brand match: "{best_keyword}"'
         
-        # Don't return anything else - let other layers handle it
-        # This ensures Layer 0 only catches OBVIOUS, COMMON merchants
+        # REJECT everything else - let semantic/behavioral layers handle it
+        # This ensures Layer 0 only catches CLEAR, UNAMBIGUOUS matches
         return None
     
     def _is_salary(self, amount: float, date: datetime, history: pd.DataFrame) -> bool:
