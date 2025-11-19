@@ -15,11 +15,12 @@ class ClassificationResult:
 class FinalClassifier:
     def __init__(self):
         self.confidence_thresholds = {
-            'auto_label': 0.75,
+            'auto_label': 0.70,  # Lowered from 0.75 to reduce L8 usage
             'probable': 0.50,
             'request_feedback': 0.0
         }
-        self.categories = [
+        # Fixed categories - ONLY these are allowed
+        self.fixed_categories = [
             'Food & Dining',
             'Commute/Transport',
             'Shopping',
@@ -118,6 +119,9 @@ class FinalClassifier:
                 layer = 'None'
                 provenance = {'layer': 'none', 'reason': 'failed_all_layers', 'zeroshot_attempted': zeroshot_conf > 0}
         
+        # Validate final category
+        final_category = self._validate_category(final_category)
+        
         # Determine if user prompt needed
         should_prompt = final_conf < self.confidence_thresholds['auto_label']
         
@@ -129,6 +133,20 @@ class FinalClassifier:
             layer_used=layer,
             should_prompt=should_prompt
         )
+    
+    def _validate_category(self, category: str) -> str:
+        """Ensure category is in fixed list."""
+        if category in self.fixed_categories:
+            return category
+        
+        # Try to map similar categories
+        category_lower = category.lower()
+        for fixed_cat in self.fixed_categories:
+            if category_lower in fixed_cat.lower() or fixed_cat.lower() in category_lower:
+                return fixed_cat
+        
+        # Default to Others
+        return 'Others/Uncategorized'
     
     def to_dict(self, result: ClassificationResult) -> Dict:
         return {

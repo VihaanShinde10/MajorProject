@@ -14,6 +14,22 @@ class BehavioralClusterer:
         self.feature_vectors = None
         self.transaction_ids = []
         self.categories = []
+        
+        # Fixed categories - enforce these
+        self.fixed_categories = [
+            'Food & Dining',
+            'Commute/Transport',
+            'Shopping',
+            'Bills & Utilities',
+            'Entertainment',
+            'Healthcare',
+            'Education',
+            'Investments',
+            'Salary/Income',
+            'Transfers',
+            'Subscriptions',
+            'Others/Uncategorized'
+        ]
     
     def fit(self, features_df: pd.DataFrame, categories: List[str] = None):
         """Fit HDBSCAN on behavioral features."""
@@ -182,7 +198,9 @@ class BehavioralClusterer:
             if cluster_categories:
                 # Majority vote
                 most_common = Counter(cluster_categories).most_common(1)[0][0]
-                self.cluster_labels[cluster_id] = most_common
+                # Validate category
+                validated_category = self._validate_category(most_common)
+                self.cluster_labels[cluster_id] = validated_category
     
     def _knn_refinement(self, feature_vector: np.ndarray, cluster_id: int, k: int = 5) -> Tuple[Optional[str], float]:
         """Refine prediction using KNN within cluster."""
@@ -214,7 +232,23 @@ class BehavioralClusterer:
             majority_fraction = count / len(neighbor_categories)
             
             if majority_fraction >= 0.7:
-                return most_common, majority_fraction
+                # Validate category
+                validated_category = self._validate_category(most_common)
+                return validated_category, majority_fraction
         
         return None, 0.0
+    
+    def _validate_category(self, category: str) -> str:
+        """Ensure category is in fixed list."""
+        if category in self.fixed_categories:
+            return category
+        
+        # Try to map similar categories
+        category_lower = category.lower()
+        for fixed_cat in self.fixed_categories:
+            if category_lower in fixed_cat.lower() or fixed_cat.lower() in category_lower:
+                return fixed_cat
+        
+        # Default to Others
+        return 'Others/Uncategorized'
 

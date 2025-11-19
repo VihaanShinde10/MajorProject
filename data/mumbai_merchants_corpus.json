@@ -1,0 +1,179 @@
+{
+  "Food & Dining": {
+    "restaurants": [
+      "mcdonalds", "mcdonald", "kfc", "dominos", "pizza hut", "pizzahut", "subway", 
+      "burger king", "burgerking", "starbucks", "cafe coffee day", "ccd", "barista",
+      "mahesh lunch home", "trishna", "theobroma", "britannia", "bademiya", "bagdadi",
+      "sarvi", "aaswad", "shree thaker bhojanalay", "gulshan", "kyani", "kayani",
+      "swati snacks", "candies", "smoke house deli", "pizza express", "social",
+      "toit", "the pantry", "indigo deli", "leopold cafe", "mondegar", "bade miya"
+    ],
+    "food_delivery": [
+      "swiggy", "zomato", "uber eats", "ubereats", "dunzo", "freshmenu", "faasos",
+      "behrouz biryani", "oven story"
+    ],
+    "cafes": [
+      "starbucks", "coffee day", "barista", "blue tokai", "third wave coffee",
+      "kala ghoda cafe", "prithvi cafe"
+    ],
+    "keywords": ["restaurant", "cafe", "hotel", "dine", "lunch", "dinner", "breakfast"]
+  },
+  
+  "Commute/Transport": {
+    "fuel": [
+      "bharat petroleum", "bpcl", "indian oil", "iocl", "hp", "hindustan petroleum", 
+      "hpcl", "shell", "reliance petroleum", "essar", "nayara"
+    ],
+    "transport": [
+      "uber", "ola", "rapido", "meru", "fastrack", "best", "mumbai metro",
+      "western railway", "central railway", "harbour line", "fastag", "paytm fastag"
+    ],
+    "parking": [
+      "mumbai parking", "bmc parking", "parking fees", "paid parking"
+    ],
+    "keywords": ["petrol", "diesel", "fuel", "gas", "taxi", "cab", "auto", "bus", "train", "metro", "toll"]
+  },
+  
+  "Shopping": {
+    "online": [
+      "amazon", "flipkart", "myntra", "ajio", "nykaa", "tata cliq", "meesho",
+      "snapdeal", "firstcry", "pepperfry", "urban ladder", "big basket", "grofers"
+    ],
+    "retail": [
+      "dmart", "reliance fresh", "reliance smart", "more", "hypercity", "spencer",
+      "big bazaar", "lifestyle", "westside", "pantaloons", "max fashion",
+      "zara", "h&m", "uniqlo", "decathlon"
+    ],
+    "electronics": [
+      "croma", "vijay sales", "reliance digital", "poorvika", "bajaj electronics",
+      "metro cash", "pai electronics"
+    ],
+    "malls": [
+      "phoenix market city", "inorbit", "infinity mall", "atria mall", "rcity",
+      "seawoods grand central", "oberoi mall", "growel", "raghuleela"
+    ],
+    "keywords": ["shopping", "purchase", "retail", "store", "mart", "mall"]
+  },
+  
+  "Bills & Utilities": {
+    "electricity": [
+      "best", "adani electricity", "tata power", "reliance energy", "reliance power",
+      "msedcl", "mahadiscom"
+    ],
+    "telecom": [
+      "airtel", "jio", "vodafone", "vodafone idea", "vi", "bsnl", "mtnl"
+    ],
+    "broadband": [
+      "jio fiber", "airtel xstream", "tata sky broadband", "hathway", "tikona",
+      "you broadband", "act fibernet", "spectra"
+    ],
+    "gas": [
+      "mahanagar gas", "mgl", "indane gas", "hp gas", "bharat gas"
+    ],
+    "water": [
+      "bmc water", "mumbai water", "water tax", "property tax"
+    ],
+    "dth": [
+      "tata sky", "dish tv", "airtel digital", "sun direct"
+    ],
+    "keywords": ["electricity", "bill", "utility", "water", "gas", "broadband", "internet", "mobile recharge", "dth"]
+  },
+  
+  "Entertainment": {
+    "movies": [
+      "pvr", "inox", "cinepolis", "carnival", "imax", "movie time", "bookmyshow",
+      "paytm movies"
+    ],
+    "events": [
+      "bookmyshow", "insider", "paytm insider", "allevents", "townscript"
+    ],
+    "gaming": [
+      "steam", "playstation", "xbox", "nintendo", "google play", "app store",
+      "epic games", "riot games"
+    ],
+    "keywords": ["movie", "cinema", "theater", "show", "concert", "event", "game"]
+  },
+  
+  "Healthcare": {
+    "hospitals": [
+      "breach candy", "jaslok", "lilavati", "hinduja", "kokilaben", "nanavati",
+      "wockhardt", "saifee", "holy family", "fortis", "apollo", "cloudnine",
+      "hiranandani", "jupiter", "criticare"
+    ],
+    "pharmacies": [
+      "apollo pharmacy", "netmeds", "medplus", "1mg", "pharmeasy", "practo",
+      "wellness forever"
+    ],
+    "diagnostics": [
+      "thyrocare", "dr lal path lab", "suburban diagnostics", "metropolis",
+      "srl diagnostics", "path lab"
+    ],
+    "keywords": ["hospital", "clinic", "doctor", "medical", "pharmacy", "medicine", "lab", "test", "diagnostic"]
+  },
+  
+  "Education": {
+    "schools": [
+      "dhirubhai ambani", "jamnabai narsee", "bombay scottish", "cathedral",
+      "campion", "st xavier", "podar", "ryan international", "vibgyor"
+    ],
+    "coaching": [
+      "byjus", "byju", "vedantu", "unacademy", "allen", "fiitjee", "time",
+      "ies", "career launcher", "triumphias"
+    ],
+    "universities": [
+      "mumbai university", "iit bombay", "vjti", "nmims", "sp jain", "jbims",
+      "sies", "kjsomaiya", "ruia", "jai hind"
+    ],
+    "keywords": ["school", "college", "university", "education", "course", "tuition", "coaching", "fees"]
+  },
+  
+  "Subscriptions": {
+    "streaming": [
+      "netflix", "amazon prime", "disney", "hotstar", "zee5", "sonyliv",
+      "voot", "alt balaji", "mx player", "jio cinema", "apple tv", "youtube premium"
+    ],
+    "music": [
+      "spotify", "apple music", "gaana", "jio saavn", "amazon music", "youtube music"
+    ],
+    "news": [
+      "times of india", "indian express", "hindu", "mint", "economic times"
+    ],
+    "cloud": [
+      "google one", "icloud", "microsoft 365", "office 365", "dropbox", "adobe"
+    ],
+    "keywords": ["subscription", "membership", "premium", "monthly", "annual", "recurring"]
+  },
+  
+  "Investments": {
+    "mutual_funds": [
+      "zerodha", "groww", "upstox", "paytm money", "et money", "kuvera",
+      "hdfc mutual fund", "icici prudential", "sbi mutual fund", "axis mutual fund",
+      "nippon india", "motilal oswal", "aditya birla"
+    ],
+    "stocks": [
+      "zerodha", "upstox", "angel broking", "angel one", "icici direct", 
+      "hdfc securities", "kotak securities", "sharekhan", "5paisa"
+    ],
+    "digital_gold": [
+      "paytm gold", "google pay gold", "phonepe gold", "jar", "mmtc pamp"
+    ],
+    "keywords": ["mutual fund", "sip", "investment", "stock", "equity", "gold", "trading", "demat"]
+  },
+  
+  "Transfers": {
+    "banks": [
+      "hdfc", "icici", "sbi", "axis", "kotak", "yes bank", "indusind", "rbl",
+      "federal", "idfc", "standard chartered", "hsbc", "dbs", "citibank"
+    ],
+    "payment_apps": [
+      "paytm", "phonepe", "google pay", "gpay", "amazon pay", "mobikwik",
+      "freecharge", "bhim", "whatsapp pay"
+    ],
+    "keywords": ["transfer", "neft", "rtgs", "imps", "upi", "wallet", "self transfer", "fund transfer"]
+  },
+  
+  "Salary/Income": {
+    "keywords": ["salary", "wages", "payroll", "income", "earnings", "remuneration", "stipend", "honorarium"]
+  }
+}
+

@@ -70,7 +70,7 @@ st.title("🔍 Transaction Categorization System")
 st.markdown("**Unsupervised Hybrid Semantic-Behavioral Categorization**")
 
 # Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload & Classify", "📊 Results", "📈 Metrics", "⚙️ Settings"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📤 Upload & Classify", "📊 Results", "📈 Metrics", "🔍 Clusters", "⚙️ Settings"])
 
 with tab1:
     st.header("Upload Transactions")
@@ -157,27 +157,12 @@ with tab1:
                         df['merchant'] = df['description']
                     
                     results = []
+                    classified_embeddings = []
+                    classified_categories = []
+                    classified_metadata = []
                     
-                    # Phase 1: Build semantic index from initial data
-                    status_text.text("Phase 1: Building semantic index...")
-                    if len(df) > 50:  # Only if enough data
-                        sample_df = df.head(100)
-                        normalized_texts = []
-                        
-                        for idx, row in sample_df.iterrows():
-                            text = str(row.get('description', ''))
-                            normalized, _ = normalizer.normalize(text)
-                            normalized_texts.append(normalized)
-                        
-                        # Get embeddings
-                        embeddings = embedder.embed_batch(normalized_texts)
-                        
-                        # Use normalized names as labels (placeholder)
-                        labels = normalized_texts
-                        metadata = [{'idx': i} for i in range(len(normalized_texts))]
-                        
-                        semantic_searcher.build_index(embeddings, labels, metadata)
-                        st.session_state.semantic_searcher = semantic_searcher
+                    # Phase 1: Sequential processing with dynamic index building
+                    status_text.text("Phase 1: Initializing sequential classification...")
                     
                     # Phase 2: Extract behavioral features and cluster
                     status_text.text("Phase 2: Extracting behavioral features...")
@@ -204,8 +189,11 @@ with tab1:
                             cluster_labels=clusterer.clusterer.labels_
                         )
                     
-                    # Phase 4: Classify each transaction
-                    status_text.text("Phase 4: Classifying transactions...")
+                    # Phase 4: Classify each transaction SEQUENTIALLY
+                    status_text.text("Phase 4: Classifying transactions sequentially...")
+                    
+                    # Rebuild index every N transactions for better accuracy
+                    rebuild_frequency = 50
                     
                     for idx, row in df.iterrows():
                         progress = (idx + 1) / len(df)
@@ -213,7 +201,20 @@ with tab1:
                         
                         history = df[df.index < idx]
                         
-                        # Layer 0: Rules
+                        # Rebuild semantic index periodically with classified transactions
+                        if len(classified_embeddings) >= 10 and (idx % rebuild_frequency == 0 or idx == len(df) - 1):
+                            status_text.text(f"Updating semantic index... ({len(classified_embeddings)} transactions)")
+                            embeddings_array = np.vstack(classified_embeddings)
+                            semantic_searcher.build_index(embeddings_array, classified_categories, classified_metadata)
+                            st.session_state.semantic_searcher = semantic_searcher
+                            
+                            # Also update clustering periodically
+                            if len(features_list) >= 20:
+                                features_df_partial = pd.DataFrame(features_list)
+                                cluster_ids = clusterer.fit(features_df_partial, classified_categories)
+                                st.session_state.clusterer = clusterer
+                        
+                        # Layer 0: Rules (highest priority - corpus-based)
                         rule_result = rule_detector.detect(row, history)
                         
                         # Layer 1: Normalization
@@ -273,10 +274,19 @@ with tab1:
                             user_txn_count=len(history)
                         )
                         
-                        # Layer 8: Zero-shot (optional, only if enabled and needed)
+                        # Layer 8: Zero-shot (VERY RESTRICTED - only for complete failures)
                         zeroshot_result = (None, 0.0, {})
-                        if zeroshot_classifier and (not semantic_result[0] and not behavioral_result[0]):
-                            # Only use zero-shot if other methods failed
+                        # STRICTER conditions: Only use L8 if ALL layers failed AND user explicitly enabled it
+                        use_layer8 = (
+                            use_zeroshot and 
+                            zeroshot_classifier and
+                            (not rule_result[0]) and  # L0 failed
+                            (not semantic_result[0] or semantic_result[1] < 0.40) and  # L3 weak/failed
+                            (not behavioral_result[0] or behavioral_result[1] < 0.40)  # L5 weak/failed
+                        )
+                        
+                        if use_layer8:
+                            # Last resort: zero-shot classification
                             zeroshot_result = zeroshot_classifier.classify(
                                 description=text,
                                 merchant=row.get('merchant', ''),
@@ -308,6 +318,16 @@ with tab1:
                         }
                         
                         results.append(result)
+                        
+                        # Store for future index building (sequential learning)
+                        if classification.confidence >= 0.60:  # Only store confident predictions
+                            classified_embeddings.append(embedding)
+                            classified_categories.append(classification.category)
+                            classified_metadata.append({
+                                'idx': idx,
+                                'description': text,
+                                'confidence': classification.confidence
+                            })
                         
                         st.session_state.metrics_tracker.log_prediction(
                             classification.category,
@@ -635,6 +655,172 @@ with tab3:
         st.info("👆 Classify transactions to see metrics")
 
 with tab4:
+    st.header("🔍 Cluster Analysis")
+    
+    if st.session_state.clusterer and st.session_state.clusterer.clusterer:
+        clusterer = st.session_state.clusterer
+        
+        # Cluster Overview
+        st.subheader("Cluster Overview")
+        
+        labels = clusterer.clusterer.labels_
+        unique_clusters = set(labels)
+        unique_clusters.discard(-1)  # Remove noise
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Clusters", len(unique_clusters))
+        with col2:
+            noise_count = sum(1 for l in labels if l == -1)
+            st.metric("Noise Points", noise_count)
+        with col3:
+            if len(labels) > 0:
+                noise_ratio = noise_count / len(labels) * 100
+                st.metric("Noise Ratio", f"{noise_ratio:.1f}%")
+        
+        # Cluster Distribution
+        st.subheader("Cluster Size Distribution")
+        
+        cluster_sizes = {}
+        for cluster_id in unique_clusters:
+            count = sum(1 for l in labels if l == cluster_id)
+            cluster_sizes[cluster_id] = count
+        
+        if cluster_sizes:
+            # Bar chart
+            cluster_df = pd.DataFrame([
+                {'Cluster ID': f'Cluster {cid}', 'Size': size, 'Category': clusterer.cluster_labels.get(cid, 'Unknown')}
+                for cid, size in sorted(cluster_sizes.items(), key=lambda x: x[1], reverse=True)
+            ])
+            
+            fig = px.bar(
+                cluster_df,
+                x='Cluster ID',
+                y='Size',
+                color='Category',
+                title='Transactions per Cluster',
+                labels={'Size': 'Number of Transactions'}
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Cluster Details Table
+        st.subheader("Cluster Details")
+        
+        cluster_details = []
+        for cluster_id in sorted(unique_clusters):
+            count = cluster_sizes.get(cluster_id, 0)
+            category = clusterer.cluster_labels.get(cluster_id, 'Unknown')
+            
+            # Calculate cluster density (cohesion)
+            cluster_mask = labels == cluster_id
+            if clusterer.feature_vectors is not None:
+                cluster_features = clusterer.feature_vectors[cluster_mask]
+                if len(cluster_features) > 1:
+                    from sklearn.metrics.pairwise import euclidean_distances
+                    distances = euclidean_distances(cluster_features)
+                    avg_distance = np.mean(distances)
+                    cohesion = 1 / (1 + avg_distance)  # Convert distance to cohesion score
+                else:
+                    cohesion = 1.0
+            else:
+                cohesion = 0.0
+            
+            cluster_details.append({
+                'Cluster ID': cluster_id,
+                'Category': category,
+                'Size': count,
+                'Cohesion Score': f"{cohesion:.3f}"
+            })
+        
+        if cluster_details:
+            details_df = pd.DataFrame(cluster_details)
+            st.dataframe(details_df, use_container_width=True)
+        
+        # Cluster Quality Metrics
+        st.subheader("Cluster Quality Metrics")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**Silhouette Score**")
+            if clusterer.feature_vectors is not None and len(unique_clusters) > 1:
+                try:
+                    from sklearn.metrics import silhouette_score
+                    # Only compute for non-noise points
+                    non_noise_mask = labels != -1
+                    if sum(non_noise_mask) > 1:
+                        score = silhouette_score(
+                            clusterer.feature_vectors[non_noise_mask],
+                            labels[non_noise_mask]
+                        )
+                        st.metric("Silhouette Score", f"{score:.3f}")
+                        st.caption("Range: [-1, 1]. Higher is better. >0.5 is good.")
+                    else:
+                        st.info("Not enough non-noise points")
+                except Exception as e:
+                    st.warning(f"Could not compute: {str(e)}")
+            else:
+                st.info("Need at least 2 clusters")
+        
+        with col2:
+            st.markdown("**Davies-Bouldin Index**")
+            if clusterer.feature_vectors is not None and len(unique_clusters) > 1:
+                try:
+                    from sklearn.metrics import davies_bouldin_score
+                    non_noise_mask = labels != -1
+                    if sum(non_noise_mask) > 1:
+                        score = davies_bouldin_score(
+                            clusterer.feature_vectors[non_noise_mask],
+                            labels[non_noise_mask]
+                        )
+                        st.metric("Davies-Bouldin Index", f"{score:.3f}")
+                        st.caption("Range: [0, ∞]. Lower is better. <1 is good.")
+                    else:
+                        st.info("Not enough non-noise points")
+                except Exception as e:
+                    st.warning(f"Could not compute: {str(e)}")
+            else:
+                st.info("Need at least 2 clusters")
+        
+        # 2D Visualization (using PCA)
+        st.subheader("Cluster Visualization (2D PCA)")
+        
+        if clusterer.feature_vectors is not None and len(clusterer.feature_vectors) > 0:
+            try:
+                from sklearn.decomposition import PCA
+                
+                # Apply PCA
+                pca = PCA(n_components=2)
+                features_2d = pca.fit_transform(clusterer.feature_vectors)
+                
+                # Create DataFrame for plotting
+                viz_df = pd.DataFrame({
+                    'PC1': features_2d[:, 0],
+                    'PC2': features_2d[:, 1],
+                    'Cluster': ['Noise' if l == -1 else f'Cluster {l}' for l in labels],
+                    'Category': [clusterer.cluster_labels.get(l, 'Noise') for l in labels]
+                })
+                
+                fig = px.scatter(
+                    viz_df,
+                    x='PC1',
+                    y='PC2',
+                    color='Category',
+                    symbol='Cluster',
+                    title='Transaction Clusters (PCA Projection)',
+                    labels={'PC1': 'First Principal Component', 'PC2': 'Second Principal Component'}
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.caption(f"PCA Explained Variance: PC1={pca.explained_variance_ratio_[0]:.1%}, PC2={pca.explained_variance_ratio_[1]:.1%}")
+                
+            except Exception as e:
+                st.error(f"Could not create visualization: {str(e)}")
+        
+    else:
+        st.info("👆 Classify transactions first to see cluster analysis")
+
+with tab5:
     st.header("System Settings")
     
     st.subheader("Model Configuration")
