@@ -21,11 +21,33 @@ class GatingNetwork(nn.Module):
         return self.network(x)
 
 class GatingController:
-    def __init__(self, model_path: str = None):
+    def __init__(self, model_path: str = None, use_trained_model: bool = True):
+        """
+        Initialize gating controller.
+        
+        Args:
+            model_path: Path to trained model weights
+            use_trained_model: If True, use trained neural network; 
+                             If False, use heuristic-based gating
+        """
         self.model = GatingNetwork()
-        if model_path:
-            self.model.load_state_dict(torch.load(model_path))
-        self.model.eval()
+        self.use_trained_model = use_trained_model
+        self.model_loaded = False
+        
+        if model_path and use_trained_model:
+            try:
+                checkpoint = torch.load(model_path, map_location='cpu')
+                if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+                    self.model.load_state_dict(checkpoint['model_state_dict'])
+                else:
+                    self.model.load_state_dict(checkpoint)
+                self.model.eval()
+                self.model_loaded = True
+                print(f"✅ Loaded trained gating model from {model_path}")
+            except Exception as e:
+                print(f"⚠️ Could not load gating model: {e}")
+                print("   Falling back to heuristic-based gating")
+                self.use_trained_model = False
     
     def compute_alpha(self, 
                       text_confidence: float,
@@ -37,28 +59,73 @@ class GatingController:
                       semantic_consensus: float = 0.0,
                       embedding_norm: float = 1.0) -> float:
         """
-        Compute gating weight α (text vs behavior) with improved heuristics.
+        Compute gating weight α (text vs behavior).
         Returns: α ∈ [0.15, 0.85]
         
         Higher α = Trust text more
         Lower α = Trust behavior more
+        
+        Uses trained neural network if available, otherwise falls back to heuristics.
         """
         # Cold-start override - force text reliance when little history
         if user_txn_count < 15:
             return max(0.7, text_confidence)
         
-        # Use improved heuristic-based alpha until network is trained
-        alpha = self._heuristic_alpha(
-            text_confidence=text_confidence,
-            token_count=token_count,
-            is_generic_text=is_generic_text,
-            recurrence_confidence=recurrence_confidence,
-            cluster_density=cluster_density,
-            user_txn_count=user_txn_count
-        )
+        # Use trained model if available
+        if self.use_trained_model and self.model_loaded:
+            alpha = self._neural_alpha(
+                text_confidence=text_confidence,
+                token_count=token_count,
+                is_generic_text=is_generic_text,
+                recurrence_confidence=recurrence_confidence,
+                cluster_density=cluster_density,
+                user_txn_count=user_txn_count,
+                semantic_consensus=semantic_consensus,
+                embedding_norm=embedding_norm
+            )
+        else:
+            # Fallback to heuristic-based alpha
+            alpha = self._heuristic_alpha(
+                text_confidence=text_confidence,
+                token_count=token_count,
+                is_generic_text=is_generic_text,
+                recurrence_confidence=recurrence_confidence,
+                cluster_density=cluster_density,
+                user_txn_count=user_txn_count
+            )
         
         # Clip to range
         alpha = max(0.15, min(0.85, alpha))
+        
+        return alpha
+    
+    def _neural_alpha(self,
+                     text_confidence: float,
+                     token_count: int,
+                     is_generic_text: bool,
+                     recurrence_confidence: float,
+                     cluster_density: float,
+                     user_txn_count: int,
+                     semantic_consensus: float,
+                     embedding_norm: float) -> float:
+        """
+        Compute alpha using trained neural network.
+        """
+        # Prepare features
+        features = torch.FloatTensor([
+            text_confidence,
+            recurrence_confidence,  # Swapped to match training order
+            token_count / 10.0,  # Normalize
+            1.0 if is_generic_text else 0.0,
+            recurrence_confidence,
+            cluster_density,
+            min(user_txn_count / 100.0, 1.0),  # Normalize
+            semantic_consensus
+        ]).unsqueeze(0)  # Add batch dimension
+        
+        # Forward pass
+        with torch.no_grad():
+            alpha = self.model(features).item()
         
         return alpha
     

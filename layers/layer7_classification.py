@@ -48,48 +48,90 @@ class FinalClassifier:
                  zeroshot_result: Tuple[Optional[str], float, Dict] = (None, 0.0, {})) -> ClassificationResult:
         """
         Final classification combining all layers.
+        REDESIGNED: Always use gating when multiple layers have results.
+        Layer 0 is now just another input, not a hard override.
         """
-        # Layer 0: Rule-based (highest priority)
-        if rule_result[0] is not None:
-            return ClassificationResult(
-                category=rule_result[0],
-                confidence=rule_result[1],
-                reason=rule_result[2],
-                provenance={'layer': 'L0_rules', 'alpha': None},
-                layer_used='L0: Rule-Based',
-                should_prompt=False
-            )
-        
-        # Layer 3: Semantic search
+        # Extract all layer results
+        rule_category, rule_conf, rule_reason = rule_result
         semantic_category, semantic_conf, semantic_prov = semantic_result
-        
-        # Layer 5: Behavioral clustering
         behavioral_category, behavioral_conf, behavioral_prov = behavioral_result
         
-        # Fuse confidences using gating
+        # Count how many layers have results
+        available_layers = []
+        if rule_category: available_layers.append('rule')
+        if semantic_category: available_layers.append('semantic')
+        if behavioral_category: available_layers.append('behavioral')
+        
+        # STRATEGY 1: Use gating when we have semantic AND behavioral (preferred)
+        # This ensures maximum layer participation
         if semantic_category and behavioral_category:
-            # Both available - use gating
+            # Both semantic and behavioral available - use gating
             final_conf = gating_alpha * semantic_conf + (1 - gating_alpha) * behavioral_conf
             
-            # Choose category based on confidence
-            if gating_alpha > 0.5:
-                final_category = semantic_category
-                reason = f"Gated fusion (α={gating_alpha:.2f}, favoring text): {semantic_prov.get('reason', '')}"
-                layer = 'L3: Semantic (gated)'
+            # If rule also matched, blend it in with lower weight
+            if rule_category:
+                # Give rule result 20% weight, gated result 80% weight
+                final_conf = 0.20 * rule_conf + 0.80 * final_conf
+                
+                # Choose category based on highest individual confidence
+                candidates = [
+                    (semantic_category, semantic_conf),
+                    (behavioral_category, behavioral_conf),
+                    (rule_category, rule_conf)
+                ]
+                final_category = max(candidates, key=lambda x: x[1])[0]
+                
+                reason = f"Multi-layer fusion (Rule+Semantic+Behavioral, α={gating_alpha:.2f})"
+                layer = 'L6: Gated Fusion (3 layers)'
             else:
-                final_category = behavioral_category
-                reason = f"Gated fusion (α={gating_alpha:.2f}, favoring behavior): {behavioral_prov.get('reason', '')}"
-                layer = 'L5: Behavioral (gated)'
+                # Choose category based on gating weight
+                if gating_alpha > 0.5:
+                    final_category = semantic_category
+                    reason = f"Gated fusion (α={gating_alpha:.2f}, favoring text): {semantic_prov.get('reason', '')}"
+                    layer = 'L6: Gated Fusion (Semantic)'
+                else:
+                    final_category = behavioral_category
+                    reason = f"Gated fusion (α={gating_alpha:.2f}, favoring behavior): {behavioral_prov.get('reason', '')}"
+                    layer = 'L6: Gated Fusion (Behavioral)'
             
             provenance = {
                 'layer': 'L6_gated_fusion',
                 'alpha': gating_alpha,
                 'text_confidence': text_confidence,
                 'behavior_confidence': behavior_confidence,
+                'rule_confidence': rule_conf if rule_category else 0.0,
                 'semantic': semantic_prov,
+                'behavioral': behavioral_prov,
+                'rule': {'category': rule_category, 'reason': rule_reason} if rule_category else None
+            }
+        
+        # STRATEGY 2: Rule + Semantic (no behavioral)
+        elif rule_category and semantic_category:
+            # Blend rule and semantic
+            final_conf = 0.30 * rule_conf + 0.70 * semantic_conf
+            final_category = semantic_category if semantic_conf > rule_conf else rule_category
+            reason = f"Rule+Semantic fusion: {rule_reason} + {semantic_prov.get('reason', '')}"
+            layer = 'L3: Semantic + L0: Rule'
+            provenance = {
+                'layer': 'L0_L3_fusion',
+                'rule': {'category': rule_category, 'confidence': rule_conf, 'reason': rule_reason},
+                'semantic': semantic_prov
+            }
+        
+        # STRATEGY 3: Rule + Behavioral (no semantic)
+        elif rule_category and behavioral_category:
+            # Blend rule and behavioral
+            final_conf = 0.30 * rule_conf + 0.70 * behavioral_conf
+            final_category = behavioral_category if behavioral_conf > rule_conf else rule_category
+            reason = f"Rule+Behavioral fusion: {rule_reason} + {behavioral_prov.get('reason', '')}"
+            layer = 'L5: Behavioral + L0: Rule'
+            provenance = {
+                'layer': 'L0_L5_fusion',
+                'rule': {'category': rule_category, 'confidence': rule_conf, 'reason': rule_reason},
                 'behavioral': behavioral_prov
             }
         
+        # STRATEGY 4: Only one layer has results (fallback to single layer)
         elif semantic_category:
             final_category = semantic_category
             final_conf = semantic_conf
@@ -103,6 +145,13 @@ class FinalClassifier:
             reason = behavioral_prov.get('reason', 'Behavioral pattern')
             layer = 'L5: Behavioral Clustering'
             provenance = {'layer': 'L5_behavioral', 'details': behavioral_prov}
+        
+        elif rule_category:
+            final_category = rule_category
+            final_conf = rule_conf
+            reason = rule_reason
+            layer = 'L0: Rule-Based'
+            provenance = {'layer': 'L0_rules', 'reason': rule_reason}
         
         else:
             # Layer 8: Zero-shot fallback (if provided)

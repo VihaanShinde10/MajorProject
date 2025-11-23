@@ -13,8 +13,22 @@ sys.path.insert(0, os.path.dirname(__file__))
 from layers.layer0_rules import RuleBasedDetector
 from layers.layer1_normalization import TextNormalizer
 from layers.layer2_embeddings import E5Embedder
-from layers.layer3_semantic_search import SemanticSearcher
-from layers.layer4_behavioral_features import BehavioralFeatureExtractor
+
+# Use enhanced versions if available, fallback to basic
+try:
+    from layers.layer3_semantic_search_attention import SemanticSearcherWithAttention as SemanticSearcher
+    ATTENTION_AVAILABLE = True
+except ImportError:
+    from layers.layer3_semantic_search import SemanticSearcher
+    ATTENTION_AVAILABLE = False
+
+try:
+    from layers.layer4_behavioral_features_enhanced import EnhancedBehavioralFeatureExtractor as BehavioralFeatureExtractor
+    ENHANCED_FEATURES_AVAILABLE = True
+except ImportError:
+    from layers.layer4_behavioral_features import BehavioralFeatureExtractor
+    ENHANCED_FEATURES_AVAILABLE = False
+
 from layers.layer5_clustering import BehavioralClusterer
 from layers.layer6_gating import GatingController
 from layers.layer7_classification import FinalClassifier
@@ -65,6 +79,17 @@ if ZEROSHOT_AVAILABLE:
     layers_list += "- L8: Zero-Shot (BART-MNLI) ✨\n"
 
 st.sidebar.markdown(layers_list)
+
+# Show enhanced features status
+if ENHANCED_FEATURES_AVAILABLE:
+    st.sidebar.success("✨ Enhanced Features (50+)")
+else:
+    st.sidebar.info("ℹ️ Basic Features (20)")
+
+if ATTENTION_AVAILABLE:
+    st.sidebar.success("✨ Attention Mechanism")
+else:
+    st.sidebar.info("ℹ️ Basic Semantic Search")
 
 # Main app
 st.title("🔍 Transaction Categorization System")
@@ -183,11 +208,43 @@ with tab1:
                     rule_detector = RuleBasedDetector()
                     normalizer = TextNormalizer()
                     embedder = E5Embedder()
-                    semantic_searcher = SemanticSearcher()
-                    feature_extractor = BehavioralFeatureExtractor()
+                    
+                    # Initialize semantic searcher with category prototypes
+                    status_text.text("🔨 Building category prototypes for semantic search...")
+                    semantic_searcher = SemanticSearcher(
+                        embedding_dim=768,
+                        embedder=embedder,  # Pass embedder to build category prototypes
+                        corpus_path='data/mumbai_merchants_corpus.json'
+                    )
+                    
+                    # Initialize feature extractor (enhanced if available)
+                    if ENHANCED_FEATURES_AVAILABLE:
+                        status_text.text("✨ Loading enhanced behavioral features (50+)...")
+                        feature_extractor = BehavioralFeatureExtractor()
+                    else:
+                        status_text.text("Loading basic behavioral features (20)...")
+                        feature_extractor = BehavioralFeatureExtractor()
+                    
                     clusterer = BehavioralClusterer()
-                    gating_controller = GatingController()
+                    
+                    # Initialize gating controller with trained model (if available)
+                    gating_controller = GatingController(
+                        model_path='models/gating_trained.pt',
+                        use_trained_model=True
+                    )
+                    
                     final_classifier = FinalClassifier()
+                    
+                    # Try to load confidence calibrator (optional)
+                    try:
+                        from layers.ensemble_classifier import EnsembleClassifier
+                        calibrator = EnsembleClassifier()
+                        calibrator.load_calibrator('models/confidence_calibrator.pkl')
+                        use_calibration = True
+                        status_text.text("✅ Confidence calibrator loaded")
+                    except:
+                        use_calibration = False
+                        calibrator = None
                     
                     # Initialize transaction cache for consistency
                     transaction_cache = TransactionCache()
@@ -446,6 +503,14 @@ with tab1:
                             zeroshot_result
                         )
                         
+                        # Apply confidence calibration if available
+                        final_confidence = classification.confidence
+                        if use_calibration and calibrator:
+                            try:
+                                final_confidence = calibrator.apply_calibration(classification.confidence)
+                            except:
+                                final_confidence = classification.confidence
+                        
                         result = {
                             'transaction_id': idx,
                             'original_description': text,
@@ -455,7 +520,7 @@ with tab1:
                             'note': note if note and not pd.isna(note) else '',
                             'amount': row['amount'],
                             'category': classification.category,
-                            'confidence': classification.confidence,
+                            'confidence': final_confidence,
                             'layer_used': classification.layer_used,
                             'reason': classification.reason,
                             'should_prompt': classification.should_prompt,
@@ -921,15 +986,18 @@ with tab4:
                     from sklearn.metrics import silhouette_score
                     # Only compute for non-noise points
                     non_noise_mask = labels != -1
-                    if sum(non_noise_mask) > 1:
+                    non_noise_labels = labels[non_noise_mask]
+                    
+                    # Need at least 2 points and at least 2 different clusters
+                    if len(non_noise_labels) > 1 and len(set(non_noise_labels)) > 1:
                         score = silhouette_score(
                             clusterer.feature_vectors[non_noise_mask],
-                            labels[non_noise_mask]
+                            non_noise_labels
                         )
                         st.metric("Silhouette Score", f"{score:.3f}")
                         st.caption("Range: [-1, 1]. Higher is better. >0.5 is good.")
                     else:
-                        st.info("Not enough non-noise points")
+                        st.info("Not enough non-noise points or clusters")
                 except Exception as e:
                     st.warning(f"Could not compute: {str(e)}")
             else:
@@ -941,15 +1009,18 @@ with tab4:
                 try:
                     from sklearn.metrics import davies_bouldin_score
                     non_noise_mask = labels != -1
-                    if sum(non_noise_mask) > 1:
+                    non_noise_labels = labels[non_noise_mask]
+                    
+                    # Need at least 2 points and at least 2 different clusters
+                    if len(non_noise_labels) > 1 and len(set(non_noise_labels)) > 1:
                         score = davies_bouldin_score(
                             clusterer.feature_vectors[non_noise_mask],
-                            labels[non_noise_mask]
+                            non_noise_labels
                         )
                         st.metric("Davies-Bouldin Index", f"{score:.3f}")
                         st.caption("Range: [0, ∞]. Lower is better. <1 is good.")
                     else:
-                        st.info("Not enough non-noise points")
+                        st.info("Not enough non-noise points or clusters")
                 except Exception as e:
                     st.warning(f"Could not compute: {str(e)}")
             else:
@@ -1038,4 +1109,26 @@ else:
 
 if st.session_state.transactions is not None:
     st.sidebar.info(f"📊 {len(st.session_state.transactions)} transactions loaded")
+
+# Enhanced system info
+st.sidebar.markdown("---")
+st.sidebar.markdown("**🔧 Enhanced Features**")
+
+# Check for trained models
+import os
+if os.path.exists('models/gating_trained.pt'):
+    st.sidebar.success("✅ Trained Gating Network")
+else:
+    st.sidebar.info("ℹ️ Using Heuristic Gating")
+
+if os.path.exists('models/confidence_calibrator.pkl'):
+    st.sidebar.success("✅ Confidence Calibrator")
+else:
+    st.sidebar.info("ℹ️ No Calibration")
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("**📚 Documentation**")
+st.sidebar.markdown("[Training Guide](TRAINING_GUIDE.md)")
+st.sidebar.markdown("[Quick Reference](QUICK_REFERENCE.md)")
+st.sidebar.markdown("[Integration Status](INTEGRATION_STATUS.md)")
 

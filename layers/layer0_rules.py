@@ -97,28 +97,32 @@ class RuleBasedDetector:
         # REDUCED DOMINANCE: Only use type hints for very specific cases
         # Most transactions should flow through semantic/behavioral layers
         # Only catch: Salary (very clear), ATM withdrawals (definitive)
+        # REDUCED CONFIDENCE: Allow other layers to participate
         if txn_type_hint in ['Salary/Income', 'Transfers']:
             if txn_type_hint == 'Salary/Income' and txn_type == 'credit' and amount >= 20000:
                 # Very high salary threshold to avoid false positives
-                return txn_type_hint, 0.96, f'Rule: High-value salary credit'
+                return txn_type_hint, 0.68, f'Rule: High-value salary credit'  # REDUCED from 0.96
             elif txn_type_hint == 'Transfers' and 'ATM-CASH-WDL' in description.upper():
                 # ATM withdrawals are definitive transfers
-                return 'Transfers', 0.98, f'Rule: ATM cash withdrawal'
+                return 'Transfers', 0.72, f'Rule: ATM cash withdrawal'  # REDUCED from 0.98
         # All other hints are ignored - let deeper layers analyze
         
         # Priority 1: Check RECIPIENT_NAME first (most reliable for UPI)
+        # REDUCED CONFIDENCE BOOST: Allow other layers to participate
         if recipient_name:
             recipient_match = self._match_corpus(recipient_name)
             if recipient_match:
                 category, confidence, reason = recipient_match
-                return category, confidence + 0.02, f"{reason} [from RECIPIENT_NAME]"
+                # Don't boost confidence - keep it low to allow layer participation
+                return category, confidence, f"{reason} [from RECIPIENT_NAME]"
         
         # Priority 2: Check UPI_ID (often contains merchant identifier)
         if upi_id:
             upi_match = self._match_corpus(upi_id)
             if upi_match:
                 category, confidence, reason = upi_match
-                return category, confidence + 0.01, f"{reason} [from UPI_ID]"
+                # Don't boost confidence - keep it low to allow layer participation
+                return category, confidence, f"{reason} [from UPI_ID]"
         
         # Priority 3: Check NOTE field (provides context)
         if note:
@@ -135,28 +139,32 @@ class RuleBasedDetector:
             return category, confidence, reason
         
         # Priority 5: Salary Detection (very specific rules)
+        # REDUCED CONFIDENCE: Allow behavioral patterns to refine
         if txn_type == 'credit':
             salary_match = self._is_salary(amount, date, user_history)
             if salary_match:
-                return 'Salary/Income', 1.0, 'Rule: Credit, monthly, high amount, month start'
+                return 'Salary/Income', 0.75, 'Rule: Credit, monthly, high amount, month start'  # REDUCED from 1.0
         
         # Priority 6: Investment Detection (SIP patterns)
+        # REDUCED CONFIDENCE: Allow behavioral clustering to refine
         if txn_type == 'debit':
             sip_match = self._is_sip(amount, combined_text, user_history)
             if sip_match:
-                return 'Investments', 1.0, 'Rule: Debit, monthly, SIP keywords, recurring'
+                return 'Investments', 0.72, 'Rule: Debit, monthly, SIP keywords, recurring'  # REDUCED from 1.0
         
         # Priority 7: STRICT Subscription Detection (checks recipient + note)
+        # REDUCED CONFIDENCE: Allow semantic/behavioral layers to refine
         subscription_match = self._is_subscription_strict(
             combined_text, recipient_name, upi_id, note, amount, date, user_history
         )
         if subscription_match:
-            return 'Subscriptions', 1.0, 'Rule: Confirmed subscription service'
+            return 'Subscriptions', 0.70, 'Rule: Confirmed subscription service'  # REDUCED from 1.0
         
         # Priority 8: Transfer Detection (checks recipient + note)
+        # REDUCED CONFIDENCE: Allow other layers to refine
         transfer_match = self._is_transfer(combined_text, recipient_name, amount, txn_type)
         if transfer_match:
-            return 'Transfers', 0.95, 'Rule: Transfer keywords or person name detected'
+            return 'Transfers', 0.68, 'Rule: Transfer keywords or person name detected'  # REDUCED from 0.95
         
         # No rule matched
         return None, 0.0, 'No rule matched'
@@ -238,36 +246,40 @@ class RuleBasedDetector:
         
         best_category, best_keyword, best_ratio, is_exact, is_dominant, is_word_boundary, match_method = matched_items[0]
         
-        # MINIMALIST LAYER 0: Only catch EXACT, UNAMBIGUOUS matches
-        # Goal: Let 90%+ of transactions flow through semantic/behavioral layers
-        # Layer 0 should be a safety net for obvious cases ONLY
+        # ULTRA-MINIMALIST LAYER 0: Only catch EXACT, UNAMBIGUOUS matches
+        # Goal: Let 98%+ of transactions flow through semantic/behavioral layers
+        # Layer 0 should be a safety net for ONLY the most obvious cases
+        # REDUCED CONFIDENCE: Allow other layers to refine and participate
         
-        # Rule 1: EXACT match with well-known brands ONLY
+        # Rule 1: EXACT match with ONLY top 5 brands - VERY SELECTIVE
         top_brands_only = [
-            'netflix', 'amazon', 'flipkart', 'swiggy', 'zomato', 'uber', 'ola',
-            'spotify', 'hotstar', 'paytm', 'phonepe', 'googlepay', 'mcdonalds', 'kfc'
+            'netflix', 'swiggy', 'zomato', 'uber', 'ola'  # REDUCED list - only most common
         ]
         if is_exact and best_keyword in top_brands_only and len(best_keyword) >= 5:
-            confidence = 0.95  # High but not perfect - allow layers to refine
+            confidence = 0.70  # REDUCED from 0.95 - allow layers to refine
             return best_category, confidence, f'Exact brand match: "{best_keyword}"'
         
-        # Rule 2: ONLY for very dominant matches (>70% of text) with long keywords
-        if is_word_boundary and is_dominant and best_ratio > 0.70 and len(best_keyword) >= 8:
-            confidence = 0.88  # Lower confidence - encourage layer participation
+        # Rule 2: ONLY for VERY dominant matches (>80% of text) with LONG keywords
+        # STRICTER thresholds to reduce Layer 0 participation
+        if is_word_boundary and is_dominant and best_ratio > 0.80 and len(best_keyword) >= 10:  # STRICTER
+            confidence = 0.65  # REDUCED from 0.88 - encourage layer participation
             return best_category, confidence, f'Dominant match: "{best_keyword}"'
         
         # REJECT everything else - semantic and behavioral layers will handle
-        # This ensures comprehensive layer participation
+        # This ensures comprehensive layer participation (95%+ transactions)
         return None
     
     def _is_salary(self, amount: float, date: datetime, history: pd.DataFrame) -> bool:
-        """Detect salary with strict rules."""
-        # Minimum salary threshold for Mumbai
-        if amount < 15000:
+        """
+        Detect salary with ULTRA-STRICT rules.
+        GOAL: Only catch obvious salaries, let behavioral patterns handle edge cases.
+        """
+        # INCREASED threshold - only very high salaries
+        if amount < 25000:  # INCREASED from 15000
             return False
         
-        # Check if it's in first 5 days or last 3 days of month
-        if not (date.day <= 5 or date.day >= 28):
+        # STRICTER: Only first 3 days or last 2 days of month
+        if not (date.day <= 3 or date.day >= 29):  # STRICTER from 5/28
             return False
         
         # Check if amount is in top 5% of credits
@@ -275,20 +287,26 @@ class RuleBasedDetector:
             credit_history = history[history['type'] == 'credit']
             if len(credit_history) > 0:
                 top_5_pct = credit_history['amount'].quantile(0.95)
-                if amount < top_5_pct * 0.8:  # Allow some variance
+                if amount < top_5_pct * 0.9:  # STRICTER from 0.8
                     return False
         
         return True
     
     def _is_sip(self, amount: float, combined_text: str, history: pd.DataFrame) -> bool:
-        """Detect SIP/mutual fund investments."""
+        """
+        Detect SIP/mutual fund investments with STRICTER rules.
+        GOAL: Only catch obvious SIPs with explicit keywords.
+        """
         # Typical SIP range
         if not (100 <= amount <= 100000):
             return False
         
-        # Check for investment keywords
+        # STRICTER: Require MULTIPLE investment keywords (not just one)
         investment_keywords = ['mutual', 'sip', 'fund', 'investment', 'amc', 'mf', 'zerodha', 'groww', 'upstox']
-        if not any(kw in combined_text for kw in investment_keywords):
+        keyword_count = sum(1 for kw in investment_keywords if kw in combined_text)
+        
+        # Need at least 2 keywords for confidence
+        if keyword_count < 2:
             return False
         
         return True
